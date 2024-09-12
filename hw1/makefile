@@ -4,8 +4,8 @@ RM = rm -f
 
 default: all
 
-all: shell.c
-	$(CC) -o shell shell.c $(CFLAGS)
+all: shell.c parser.c
+	$(CC) parser.c shell.c -o shell $(CFLAGS)
 
 clean veryclean:
 	$(RM) shell

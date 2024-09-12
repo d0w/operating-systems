@@ -1,8 +1,13 @@
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h> 
+
+#include "parser.h"
+
 #define BUFSIZE 512
-#define DELIMITERS "<>|&;"
+#define WORDSIZE 32
 
 struct process {
     char *name;
@@ -11,79 +16,38 @@ struct process {
     int status;
 };
 
-// TRY USING FSM
-/* 
-If normal character, just add to array
-if special charadcter, switch state
-    - state 0 - add char to array
-    - state 1 (|) - take output from previous state and pipe to next command
-    - state 2 (<) - take input from file, go back to state 0
-    - state 3 (>) - output to file, go back to state 0
-    - state 4 (&) - run in background, go back to state 0
-*/
-
-// parse command and separate into string array
-char **parseCommand(char *buffer) {
-    char **args = (char **) malloc(BUFSIZE * sizeof(char *));
-    char *tokens;
-    int i = 0;
-    tokens = strtok(buffer, DELIMITERS);
-    while (tokens != NULL) {
-        args[i] = tokens;
-        i++;
-        tokens = strtok(NULL, "\n");
-    }
-    args[i] = NULL;
-    return args;
-}
+struct command {
+    struct process *processes;
+    int num_processes;
+    int status;
+};
 
 
 // read command from stdin or file
-int readCommand(char *buffer, int size, FILE *stream) {
-    printf("my_shell$");
-    if (stream == NULL) {
-        fgets(buffer, size, stdin);
-    }
-    else {
-        fgets(buffer, size, stdin);
+// FILE *stream
+int readCommand(char *buffer, int size) {
+    printf("w;elkfj");
+
+    // checks for EOF
+    char *line = fgets(buffer, size, stdin);
+    if (line == NULL) {
+        return 5;
     }
     // char **cmds = parseCommand(buffer);
 
     // holds current command
-    char *curr = (char *)malloc(sizeof(char) * BUFSIZE);
-
-    // loop through buffer and check for special characters
-    int i = 0;
-    int j = 0;
-    while (buffer[i] != '\n') {
-        switch(buffer[i]) {
-            case '|':
-                // do something with previous command
-                printf("%s\n", curr);
-                curr = memset(curr, 0, strlen(curr));
-                j = -1;
-                break;
-            case '<':
-                // 
-                break;
-            case '>':
-                break;
-            case '&':
-                // end of command
-                break;
-            default:
-                curr[j] = buffer[i];
-                break;
-        }
-        i++;
-        j++;
-        
-    }
+    // char *curr = (char *)malloc(sizeof(char) * BUFSIZE);
 
     // run command
 
+    char **curr = parseLine(buffer);
 
-    printf("%s\n", curr);
+    int i = 0;
+    while(curr[i] != NULL) {
+        printf("%s\n", curr[i]);
+        i++;
+    }
+    // printf("%s\n", curr);
 
 
     // print debugging
@@ -96,10 +60,13 @@ int readCommand(char *buffer, int size, FILE *stream) {
 
 // main shell
 int shell() {
+    char buf[BUFSIZE];
+    int status;
     while (1) {
-        char buf[BUFSIZE];
-        readCommand(buf, BUFSIZE, NULL);
-        if (strcmp(buf, "exit\n") == 0) {
+        printf("my_shell$");
+        status = readCommand(buf, BUFSIZE);
+        if (status == 5) {
+            printf("\n");
             break;
         }
         if (fork() != 0) {
@@ -107,7 +74,7 @@ int shell() {
             // waitpid(-1, &status, 0);
         } else {
             // child code
-            execve(buf, NULL, 0);
+            // execve(buf, NULL, 0);
         }
     }
     return 0;
