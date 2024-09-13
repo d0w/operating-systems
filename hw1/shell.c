@@ -1,7 +1,44 @@
 #include "parser.h"
 
-#define BUFSIZE 512
-#define WORDSIZE 32
+struct Pipeline *initPipeline() {
+	struct Pipeline* pipe = malloc(sizeof(struct Pipeline));
+
+	pipe->commands = NULL;
+	pipe->background = FALSE;
+
+	return pipe;
+}
+
+struct Command* initCommand() {
+	struct Command* command = malloc(sizeof(struct Command));
+	for(int i = 0; i < BUFSIZE; i++) {
+		command->args[i] = NULL;
+	}
+	command->next = NULL;
+
+	return command;
+}
+
+int cleanPipeline(struct Pipeline *pipe) {
+    struct Command *curr = pipe->commands;
+    struct Command *next = NULL;
+
+    while(curr != NULL) {
+        next = curr->next;
+        free(curr);
+        curr = next;
+    }
+
+    free(pipe);
+    return 0;
+}
+
+int cleanCommand(struct Command *command) {
+    free(command->args);
+    free(command);
+    return 0;
+}
+
 
 
 
@@ -9,24 +46,20 @@
 // read command from stdin or file
 // FILE *stream
 int readCommand(char *buffer, int size) {
-
+    printf("my_shell$");
+    fflush(NULL);
+    
     // checks for EOF
-    char *line = fgets(buffer, size, stdin);
-    if (line == NULL) {
-        return 5;
+    if(fgets(buffer, BUFSIZE, stdin) == NULL) {
+        return -1;
     }
-    // char **cmds = parseCommand(buffer);
 
-    // holds current command
-    // char *curr = (char *)malloc(sizeof(char) * BUFSIZE);
 
-    // run command
 
     struct Command *curr = parseLine(buffer);
 
     if (curr == NULL) {
-        printf("ERROR: Invalid command\n");
-        return -1;
+        return 5;
     }
 
     while(curr != NULL) {
@@ -52,22 +85,29 @@ int readCommand(char *buffer, int size) {
 // main shell
 int shell() {
     char buf[BUFSIZE];
-    pid_t pid;
+    struct Pipeline *pipe = initPipeline();
+    // pid_t pid;
     int status;
-    while (1) {
-        printf("my_shell$");
-        status = readCommand(buf, BUFSIZE);
-        if (status == 5) {
-            printf("\n");
-            break;
+    while ((status = readCommand(buf, BUFSIZE)) >= 0) {
+        if (status > 0) {
+            switch(status) {
+                case 5:
+                    break;
+                default:
+                    break;
+            }
         }
-        if ((pid = fork()) != 0) {
-            // parent process
-            // waitpid(-1, &status, 0);
-        } else {
-            // child code
-            // execve(buf, NULL, 0);
+        else {
+            // execute command logic here
         }
+        // if ((pid = fork()) != 0) {
+        //     // parent process
+        //     // waitpid(-1, &status, 0);
+        // } else {
+        //     // child code
+        //     // execve(buf, NULL, 0);
+        // }
+        memset(buf, '\0', sizeof(buf)); 
     }
     return 0;
 }

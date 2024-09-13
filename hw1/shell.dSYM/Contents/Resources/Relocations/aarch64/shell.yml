@@ -2,9 +2,12 @@
 triple:          'arm64-apple-darwin'
 binary-path:     '/Users/derek/Documents/CSWork/EC440/operating-systems/hw1/shell'
 relocations:
-  - { offsetInCU: 0x26, offset: 0x26, size: 0x8, addend: 0x0, symName: _parseCommand, symObjAddr: 0x0, symBinAddr: 0x100003D30, symSize: 0xA0 }
-  - { offsetInCU: 0x42, offset: 0x42, size: 0x8, addend: 0x0, symName: _parseCommand, symObjAddr: 0x0, symBinAddr: 0x100003D30, symSize: 0xA0 }
-  - { offsetInCU: 0x94, offset: 0x94, size: 0x8, addend: 0x0, symName: _readCommand, symObjAddr: 0xA0, symBinAddr: 0x100003DD0, symSize: 0x80 }
-  - { offsetInCU: 0xD8, offset: 0xD8, size: 0x8, addend: 0x0, symName: _shell, symObjAddr: 0x120, symBinAddr: 0x100003E50, symSize: 0x98 }
-  - { offsetInCU: 0x10E, offset: 0x10E, size: 0x8, addend: 0x0, symName: _main, symObjAddr: 0x1B8, symBinAddr: 0x100003EE8, symSize: 0x5C }
+  - { offsetInCU: 0x26, offset: 0x26, size: 0x8, addend: 0x0, symName: _parseCommand, symObjAddr: 0x0, symBinAddr: 0x1000037FC, symSize: 0xFC }
+  - { offsetInCU: 0x118, offset: 0x118, size: 0x8, addend: 0x0, symName: _parseCommand, symObjAddr: 0x0, symBinAddr: 0x1000037FC, symSize: 0xFC }
+  - { offsetInCU: 0x178, offset: 0x178, size: 0x8, addend: 0x0, symName: _getTokenType, symObjAddr: 0xFC, symBinAddr: 0x1000038F8, symSize: 0x168 }
+  - { offsetInCU: 0x1AE, offset: 0x1AE, size: 0x8, addend: 0x0, symName: _parseLine, symObjAddr: 0x264, symBinAddr: 0x100003A60, symSize: 0x200 }
+  - { offsetInCU: 0x26, offset: 0x28A, size: 0x8, addend: 0x0, symName: _readCommand, symObjAddr: 0x0, symBinAddr: 0x100003C60, symSize: 0x13C }
+  - { offsetInCU: 0x41, offset: 0x2A5, size: 0x8, addend: 0x0, symName: _readCommand, symObjAddr: 0x0, symBinAddr: 0x100003C60, symSize: 0x13C }
+  - { offsetInCU: 0xA1, offset: 0x305, size: 0x8, addend: 0x0, symName: _shell, symObjAddr: 0x13C, symBinAddr: 0x100003D9C, symSize: 0xAC }
+  - { offsetInCU: 0xE5, offset: 0x349, size: 0x8, addend: 0x0, symName: _main, symObjAddr: 0x1E8, symBinAddr: 0x100003E48, symSize: 0x5C }
 ...

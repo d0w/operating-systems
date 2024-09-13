@@ -28,12 +28,6 @@ char **parseCommand(char *command) {
 
     // loop through command and separate by special characters, checking validity
     while ((token = getTokenType(command, &tokenLength)) != T_NONE) {
-        // error handle for incorrect pipe
-        if (token == T_PIPE) {
-            fprintf(stderr, "ERROR: Unexpected pipe is not preceded by a command.\n");
-            return NULL;
-        }
-
         command += strspn(command, WHITESPACE);
         args[idx] = strndup(command, tokenLength);
         
@@ -65,7 +59,17 @@ struct Command *parseLine(char *buffer) {
         }
         //
         if (token == T_PIPE) {
+            size_t temp = 0;
             buffer += strspn(buffer, WHITESPACE);
+
+            // checking for pipe at beginning of command and if pipe does not have command before
+            if (len == 0) {
+                fprintf(stderr,"ERROR: Invalid command. Pipe has no command before\n");
+                return NULL;
+            } else if (getTokenType(buffer+tokenLength, &temp) == T_PIPE) {
+                fprintf(stderr, "ERROR: Invalid command. Pipe has no command before\n");
+                return NULL;
+            }
 
             // Create a new command for previous part
             current = (struct Command *)malloc(sizeof(struct Command));
