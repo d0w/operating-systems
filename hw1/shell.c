@@ -1,32 +1,14 @@
-
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h> 
-
 #include "parser.h"
 
 #define BUFSIZE 512
 #define WORDSIZE 32
 
-struct process {
-    char *name;
-    char **args;
-    int pid;
-    int status;
-};
 
-struct command {
-    struct process *processes;
-    int num_processes;
-    int status;
-};
 
 
 // read command from stdin or file
 // FILE *stream
 int readCommand(char *buffer, int size) {
-    printf("w;elkfj");
 
     // checks for EOF
     char *line = fgets(buffer, size, stdin);
@@ -40,12 +22,21 @@ int readCommand(char *buffer, int size) {
 
     // run command
 
-    char **curr = parseLine(buffer);
+    struct Command *curr = parseLine(buffer);
 
-    int i = 0;
-    while(curr[i] != NULL) {
-        printf("%s\n", curr[i]);
-        i++;
+    if (curr == NULL) {
+        printf("ERROR: Invalid command\n");
+        return -1;
+    }
+
+    while(curr != NULL) {
+        char **commandPtr = curr->args;
+        while (*commandPtr != NULL) {
+            printf("%s ", *commandPtr);
+            commandPtr++;
+        }
+        printf("\n");
+        curr = curr->next;
     }
     // printf("%s\n", curr);
 
@@ -61,6 +52,7 @@ int readCommand(char *buffer, int size) {
 // main shell
 int shell() {
     char buf[BUFSIZE];
+    pid_t pid;
     int status;
     while (1) {
         printf("my_shell$");
@@ -69,7 +61,7 @@ int shell() {
             printf("\n");
             break;
         }
-        if (fork() != 0) {
+        if ((pid = fork()) != 0) {
             // parent process
             // waitpid(-1, &status, 0);
         } else {

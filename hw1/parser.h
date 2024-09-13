@@ -5,7 +5,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "shell.h"
 // #include <unistd.h> 
+
 
 
 // TRY USING FSM
@@ -24,7 +26,7 @@ if special charadcter, switch state
 
 enum tokenType getTokenType(const char *token, size_t *tokenLength);
 // 
-char **parseLine(char *buffer);
+struct Command *parseLine(char *buffer);
 
 
 #endif
