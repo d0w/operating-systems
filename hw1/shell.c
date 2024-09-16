@@ -1,6 +1,6 @@
 #include "parser.h"
 
-struct Pipeline *initPipeline() {
+struct Pipeline* initPipeline() {
 	struct Pipeline* pipe = malloc(sizeof(struct Pipeline));
 
 	pipe->commands = NULL;
@@ -25,7 +25,7 @@ int cleanPipeline(struct Pipeline *pipe) {
 
     while(curr != NULL) {
         next = curr->next;
-        free(curr);
+        cleanCommand(curr);
         curr = next;
     }
 
@@ -45,7 +45,7 @@ int cleanCommand(struct Command *command) {
 
 // read command from stdin or file
 // FILE *stream
-int readCommand(char *buffer, int size) {
+int readCommand(char *buffer, int size, struct Pipeline *pipe) {
     printf("my_shell$");
     fflush(NULL);
     
@@ -54,9 +54,11 @@ int readCommand(char *buffer, int size) {
         return -1;
     }
 
+    pipe->commands = parseLine(buffer); // calls parser.c function
 
 
-    struct Command *curr = parseLine(buffer);
+
+    struct Command *curr = pipe->commands;
 
     if (curr == NULL) {
         return 5;
@@ -78,17 +80,52 @@ int readCommand(char *buffer, int size) {
     
     // do command logic here
 
-    free(curr);
+    // free(curr);
     return 0;
 }
+
+// int executePipeline(struct Pipeline *pipe) {
+//     struct Command *curr = pipe->commands;
+//     int status;
+
+//     while (curr != NULL) {
+//         // fork and execute each command in the pipeline
+//         pid_t pid = fork();
+//         if (pid == 0) {
+//             // child process
+//             execvp(curr->args[0], curr->args);
+//             perror("execvp failed");
+//             exit(-1);
+//         } else if (pid < 0) {
+//             perror("fork failed");
+//             return -1;
+//         } else {
+//             // parent
+//             if (waitpid(pid, &status, 0) == -1) {
+//                 perror("waitpid failed");
+//                 return -1;
+//             }
+//         }
+//         // curr = curr->next;
+//         curr = NULL;
+//     }
+
+//     // wait for all child processes to finish
+//     // while (wait(&status) > 0);
+//     // while (wait(&status))
+
+//     return 0;
+// }
 
 // main shell
 int shell() {
     char buf[BUFSIZE];
     struct Pipeline *pipe = initPipeline();
+
     // pid_t pid;
     int status;
-    while ((status = readCommand(buf, BUFSIZE)) >= 0) {
+    while ((status = readCommand(buf, BUFSIZE, pipe)) >= 0) {
+
         if (status > 0) {
             switch(status) {
                 case 5:
@@ -99,6 +136,8 @@ int shell() {
         }
         else {
             // execute command logic here
+
+
         }
         // if ((pid = fork()) != 0) {
         //     // parent process

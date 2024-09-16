@@ -13,7 +13,7 @@
 
 struct Pipeline {
     struct Command *commands;
-    int count;
+    // int count;
     int background;
 };
 
@@ -30,7 +30,7 @@ struct Command {
     char **args;
 };
 
-int readCommand(char *buffer, int size);
+int readCommand(char *buffer, int size, struct Pipeline *pipe);
 int shell();
 struct Command *initCommand();
 struct Process *initProcess();

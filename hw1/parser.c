@@ -39,7 +39,7 @@ char **parseCommand(char *command) {
     return args;
 }
 
-// splits by | 
+// splits by |. Returns head of linked list of tokenized commands
 struct Command *parseLine(char *buffer) {
     struct Command *head = NULL;
     struct Command *current = NULL;
@@ -72,7 +72,8 @@ struct Command *parseLine(char *buffer) {
             }
 
             // Create a new command for previous part
-            current = (struct Command *)malloc(sizeof(struct Command));
+            // current = (struct Command *)malloc(sizeof(struct Command));
+            current = initCommand();
             current->args = parseCommand(strndup(bufferStart, len));
             current->next = NULL;
 
@@ -103,7 +104,8 @@ struct Command *parseLine(char *buffer) {
     if (len > 0) {
 
 
-        current = (struct Command *)malloc(sizeof(struct Command));
+        // current = (struct Command *)malloc(sizeof(struct Command));
+        current = initCommand();
         current->args = parseCommand(strndup(bufferStart, len));
         current->next = NULL;
 
