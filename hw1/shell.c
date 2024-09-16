@@ -11,9 +11,7 @@ struct Pipeline* initPipeline() {
 
 struct Command* initCommand() {
 	struct Command* command = malloc(sizeof(struct Command));
-	for(int i = 0; i < BUFSIZE; i++) {
-		command->args[i] = NULL;
-	}
+    command->args = NULL;
 	command->next = NULL;
 
 	return command;
@@ -58,21 +56,21 @@ int readCommand(char *buffer, int size, struct Pipeline *pipe) {
 
 
 
-    struct Command *curr = pipe->commands;
+    // struct Command *curr = pipe->commands;
 
-    if (curr == NULL) {
-        return 5;
-    }
+    // if (curr == NULL) {
+    //     return 5;
+    // }
 
-    while(curr != NULL) {
-        char **commandPtr = curr->args;
-        while (*commandPtr != NULL) {
-            printf("%s ", *commandPtr);
-            commandPtr++;
-        }
-        printf("\n");
-        curr = curr->next;
-    }
+    // while(curr != NULL) {
+    //     char **commandPtr = curr->args;
+    //     while (*commandPtr != NULL) {
+    //         printf("%s ", *commandPtr);
+    //         commandPtr++;
+    //     }
+    //     printf("\n");
+    //     curr = curr->next;
+    // }
     // printf("%s\n", curr);
 
 
@@ -84,38 +82,51 @@ int readCommand(char *buffer, int size, struct Pipeline *pipe) {
     return 0;
 }
 
-// int executePipeline(struct Pipeline *pipe) {
-//     struct Command *curr = pipe->commands;
-//     int status;
+int executePipeline(struct Pipeline *pipe) {
+    struct Command *curr = pipe->commands;
+    int status;
 
-//     while (curr != NULL) {
-//         // fork and execute each command in the pipeline
-//         pid_t pid = fork();
-//         if (pid == 0) {
-//             // child process
-//             execvp(curr->args[0], curr->args);
-//             perror("execvp failed");
-//             exit(-1);
-//         } else if (pid < 0) {
-//             perror("fork failed");
-//             return -1;
-//         } else {
-//             // parent
-//             if (waitpid(pid, &status, 0) == -1) {
-//                 perror("waitpid failed");
-//                 return -1;
-//             }
-//         }
-//         // curr = curr->next;
-//         curr = NULL;
-//     }
+    char command[WORDSIZE];
 
-//     // wait for all child processes to finish
-//     // while (wait(&status) > 0);
-//     // while (wait(&status))
+    while (curr != NULL) {
+        memset(command, '\0', sizeof(command));
+        // fork and execute each command in the pipeline
+        // print out curr args array
+        pid_t pid = fork();
+        if (pid == 0) {
+            // child process
+            strcpy(command, "/bin/");
+            strcat(command, curr->args[0]);
+            
 
-//     return 0;
-// }
+
+            int response = execvp(command, curr->args);
+            if (response != 0) {
+                fprintf(stderr, "Command not found: %s\n", curr->args[0]);
+                exit(-1);
+            }
+        } else if (pid < 0) {
+            fprintf(stderr,"fork failed");
+            return -1;
+        } else {
+            // parent
+
+            while (waitpid(pid, &status, 0) == -1) {
+                fprintf(stderr, "waitpid failed");
+                return -1;
+            }
+            // printf("Child %d exited with status %d\n", pid, WEXITSTATUS(status));
+        }
+        curr = curr->next;
+        curr = NULL;
+    }
+
+    // wait for all child processes to finish
+    // while (wait(&status) > 0);
+    // while (wait(&status))
+
+    return 0;
+}
 
 // main shell
 int shell() {
@@ -136,8 +147,13 @@ int shell() {
         }
         else {
             // execute command logic here
+            executePipeline(pipe);
 
+            // clean up
+            cleanPipeline(pipe);
 
+            // reinitialize pipeline
+            pipe = initPipeline();
         }
         // if ((pid = fork()) != 0) {
         //     // parent process
@@ -153,7 +169,7 @@ int shell() {
 
 int main(int argc, char **argv) {
     int output = shell();
-    return output || 0;
+    return output || -1;
 }
 
 

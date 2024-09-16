@@ -5,6 +5,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h> 
+#include <sys/wait.h>
+#include <sys/types.h>
 
 #define BUFSIZE 512
 #define WORDSIZE 32
