@@ -32,8 +32,8 @@ struct Command {
     char **args;
 };
 
-int readCommand(char *buffer, int size, struct Pipeline *pipe);
-int shell();
+int readCommand(char *buffer, int size, struct Pipeline *pipe, int usePrompt);
+int shell(char *arg);
 struct Command *initCommand();
 struct Process *initProcess();
 struct Pipeline *initPipeline();

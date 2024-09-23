@@ -43,16 +43,24 @@ int cleanCommand(struct Command *command) {
 
 // read command from stdin or file
 // FILE *stream
-int readCommand(char *buffer, int size, struct Pipeline *pipe) {
-    printf("my_shell$");
-    fflush(NULL);
+int readCommand(char *buffer, int size, struct Pipeline *pipe, int usePrompt) {
+    if (usePrompt) {
+        printf("my_shell$ ");
+    }
     
     // checks for EOF
     if(fgets(buffer, BUFSIZE, stdin) == NULL) {
         return -1;
+        // exit(0);
     }
+    // print out buffer char by char
+    // for (int i = 0; buffer[i] != '\0'; i++) {
+    //     printf("%c ", buffer[i]);
+    // }
 
     pipe->commands = parseLine(buffer); // calls parser.c function
+
+
 
 
 
@@ -71,7 +79,6 @@ int readCommand(char *buffer, int size, struct Pipeline *pipe) {
     //     printf("\n");
     //     curr = curr->next;
     // }
-    // printf("%s\n", curr);
 
 
     // print debugging
@@ -84,40 +91,58 @@ int readCommand(char *buffer, int size, struct Pipeline *pipe) {
 
 int executePipeline(struct Pipeline *pipe) {
     struct Command *curr = pipe->commands;
+    // struct Command *temp = curr;
     int status;
 
-    char command[WORDSIZE];
+    // print commands
+    // while (temp != NULL) {
+    //     char **commandPtr = temp->args;
+    //     while (*commandPtr != NULL) {
+    //         printf("%s+", *commandPtr);
+    //         commandPtr++;
+    //     }
+    //     printf("\n");
+    //     temp = temp->next;
+    // }
+
+    // char command[WORDSIZE];e
 
     while (curr != NULL) {
-        memset(command, '\0', sizeof(command));
+        // memset(command, '\0', sizeof(command));
         // fork and execute each command in the pipeline
         // print out curr args array
         pid_t pid = fork();
         if (pid == 0) {
             // child process
-            strcpy(command, "/bin/");
-            strcat(command, curr->args[0]);
-            
-
-
-            int response = execvp(command, curr->args);
+            // might need next line
+            // strcpy(command, "/bin/");
+            // strcat(command, curr->args[0]);
+            // char *arg[] = {"echo", "-e", "a\nb\nc", NULL};
+            // int response = execvp(arg[0], arg+1);
+            // printf("Command: %s\n", curr->args[0]);
+            // for (int i = 0; curr->args[i] != NULL; i++) {
+            //     printf("Arg: %s\n", curr->args[i]);
+            // }
+            // char *arg[] = {"echo", "yay", ">", "tes.txt", NULL};
+            // int response = execvp(arg[0], arg);
+            int response = execvp(curr->args[0], curr->args);
             if (response != 0) {
-                fprintf(stderr, "Command not found: %s\n", curr->args[0]);
+                fprintf(stderr, "ERROR: Command not found: %s\n", curr->args[0]);
                 exit(-1);
             }
         } else if (pid < 0) {
-            fprintf(stderr,"fork failed");
+            fprintf(stderr,"ERROR: fork failed");
             return -1;
         } else {
             // parent
 
             while (waitpid(pid, &status, 0) == -1) {
-                fprintf(stderr, "waitpid failed");
+                fprintf(stderr, "ERROR: waitpid failed");
                 return -1;
             }
             // printf("Child %d exited with status %d\n", pid, WEXITSTATUS(status));
         }
-        curr = curr->next;
+        // curr = curr->next;
         curr = NULL;
     }
 
@@ -125,17 +150,22 @@ int executePipeline(struct Pipeline *pipe) {
     // while (wait(&status) > 0);
     // while (wait(&status))
 
-    return 0;
+    return status;
 }
 
 // main shell
-int shell() {
+int shell(char *arg) {
     char buf[BUFSIZE];
     struct Pipeline *pipe = initPipeline();
 
+    int usePrompt = 1;
+    if (strcmp(arg, "-n") == 0) {
+        usePrompt = 0;
+    }
+
     // pid_t pid;
     int status;
-    while ((status = readCommand(buf, BUFSIZE, pipe)) >= 0) {
+    while ((status = readCommand(buf, BUFSIZE, pipe, usePrompt)) >= 0) {
 
         if (status > 0) {
             switch(status) {
@@ -163,13 +193,17 @@ int shell() {
         //     // execve(buf, NULL, 0);
         // }
         memset(buf, '\0', sizeof(buf)); 
+        fflush(NULL);
     }
     return 0;
 }
 
 int main(int argc, char **argv) {
-    int output = shell();
-    return output || -1;
+    if (argv[1] == NULL) {
+        return shell("");
+    }
+    int output = shell(argv[1]);
+    return output;
 }
 
 

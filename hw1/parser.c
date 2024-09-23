@@ -1,9 +1,8 @@
-// loop through string and separate
 #include "parser.h"
 #include "shell.h"
 #define BUFSIZE 512
 #define WORDSIZE 32
-#define DELIMITERS "|&<>"
+#define DELIMITERS "|&<>\""
 #define WHITESPACE " \t\n"
 
 enum tokenType {
@@ -13,27 +12,71 @@ enum tokenType {
     T_WORD,
     T_LEFT_ARROW,
     T_RIGHT_ARROW,
-    T_NEXT
+    T_NEXT,
+    T_QUOTE
 };
 
 // separates command into array of strings (cd /here -> ["cd", "/here"])
 char **parseCommand(char *command) {
+    // REMOVE AFTER MINI DEADLINE 1
+    // printf("%s\n", command);
+
     char **args = (char **) malloc(BUFSIZE * sizeof(char *));
     size_t tokenLength = 0;
     enum tokenType token;
 
     int idx = 0;
 
-    // printf("Command: %s\n", command);
+    // print command with leading and trailing spaces stripped
+    printf("%s\n", command + strspn(command, WHITESPACE));
+    fflush(stdout);
+
+    // used only for printing out command, remove after mini deadline
+    // size_t tempLen;
+    // enum tokenType tempToken;
+
 
     // loop through command and separate by special characters, checking validity
     while ((token = getTokenType(command, &tokenLength)) != T_NONE) {
+        if (token == T_QUOTE) {
+            command += tokenLength;
+            continue;
+        }
+
+        // get rid of leading whitespace
         command += strspn(command, WHITESPACE);
-        args[idx] = strndup(command, tokenLength);
+
+        // 
+        char *temp = strndup(command,tokenLength);
+
+        if (temp[0] == '"' && temp[strlen(temp)-1] == '"') {
+            if (temp[0] == '"') {
+                args[idx] = strndup(command+1, tokenLength-1);
+            } else if (temp[strlen(temp)-1] == '"') {
+                args[idx] = strndup(command, tokenLength-1);
+            }
+           // args[idx] = strndup(command+1, tokenLength-2);
+        } else {
+            args[idx] = strndup(command, tokenLength);
+        }
         
         command += tokenLength;
         idx++;
+
+        // remove after mini deadline
+        // if ((tempToken = getTokenType(command, &tempLen)) == T_NONE) {
+        //     printf("%s", temp);
+        // } else {
+        //     printf("%s ", temp);
+        // }
+
+        free(temp);
+
+
     }
+    // remove after mini deadline
+    // printf("\n");
+
     args[idx] = NULL;
 
     return args;
@@ -144,6 +187,9 @@ enum tokenType getTokenType(const char *cursor, size_t *tokenLength) {
         case '\n':
             *tokenLength = 0;
             return T_NEXT;
+        case '"':
+            *tokenLength = 1;
+            return T_QUOTE;
         default:
             // if no special characters, set tokenLength to length of token (up to next whitespace or special char)
             *tokenLength = strcspn(cursor, DELIMITERS WHITESPACE);

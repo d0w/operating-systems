@@ -2,6 +2,11 @@
 Derek Xu 
 U18821640
 
+# Mini-Deadline Explanation
+In the parser, I opted to use an FSM-like parsing style, where instead of trying to separate the using delimiters, the code will go character by character and perform actions depending on the character. In the code, by doing this, we can tokenize the string more easily (separate commands into arrays of words). It also lets the code easily know when to stop adding characters to a command and begin parsing a new command (aka when piping occurs). The parser essentially gets the next character type (after skipping whitespace) and if it doesn't hit a pipe, keep adding to the current command. Then once hitting a pipe, parse the command character by character, adding each character to its own element in an array. This tokenizing method will prove useful once we start working with files such as with >< as we can route commands right when we see them instead of having to separate the whole string.
+
+The main problem with the sub-deadline was the autograder. My output was exact but still givin me errors. In the end, I solved it by fflush(stdout) after every print.
+
 # Submissions Guidelines
 Your shell must be written in C and run on Linux. It must compile without any
 warning/errors and run on ec440.bu.edu. (i.e., gcc -Werror will be in use)
