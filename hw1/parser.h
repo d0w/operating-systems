@@ -22,11 +22,11 @@ if special charadcter, switch state
 */
 
 // parse command and separate into string array
-
+int parseCommand(char *buffer, struct Command *command, int first, int last);
 
 enum tokenType getTokenType(const char *token, size_t *tokenLength);
 // 
-struct Command *parseLine(char *buffer);
+struct Command *parseLine(char *buffer, int *background);
 
 
 #endif

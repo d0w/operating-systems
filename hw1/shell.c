@@ -13,6 +13,8 @@ struct Command* initCommand() {
 	struct Command* command = malloc(sizeof(struct Command));
     command->args = NULL;
 	command->next = NULL;
+    command->inPath = NULL;
+    command->outPath = NULL;
 
 	return command;
 }
@@ -57,10 +59,9 @@ int readCommand(char *buffer, int size, struct Pipeline *pipe, int usePrompt) {
     // for (int i = 0; buffer[i] != '\0'; i++) {
     //     printf("%c ", buffer[i]);
     // }
-
-    pipe->commands = parseLine(buffer); // calls parser.c function
-
-
+    int background = 0;
+    pipe->commands = parseLine(buffer, &background); // calls parser.c function
+    pipe->background = background;
 
 
 
@@ -94,23 +95,21 @@ int executePipeline(struct Pipeline *pipe) {
     // struct Command *temp = curr;
     int status;
 
-    // print commands
-    // while (temp != NULL) {
-    //     char **commandPtr = temp->args;
-    //     while (*commandPtr != NULL) {
-    //         printf("%s+", *commandPtr);
-    //         commandPtr++;
-    //     }
-    //     printf("\n");
-    //     temp = temp->next;
-    // }
+    while (curr != NULL) {
+        printf("Command: %s\n", curr->args[0]);
+        for (int i = 0; curr->args[i] != NULL; i++) {
+            printf("Arg: %s\n", curr->args[i]);
+        }
+        printf("In: %s\n", curr->inPath);
+        printf("Out: %s\n", curr->outPath);
+        printf("Background: %d\n", pipe->background);
+        curr = curr->next;
+    }
+    curr = pipe->commands;
 
-    // char command[WORDSIZE];e
+
 
     while (curr != NULL) {
-        // memset(command, '\0', sizeof(command));
-        // fork and execute each command in the pipeline
-        // print out curr args array
         pid_t pid = fork();
         if (pid == 0) {
             // child process
@@ -185,13 +184,6 @@ int shell(char *arg) {
             // reinitialize pipeline
             pipe = initPipeline();
         }
-        // if ((pid = fork()) != 0) {
-        //     // parent process
-        //     // waitpid(-1, &status, 0);
-        // } else {
-        //     // child code
-        //     // execve(buf, NULL, 0);
-        // }
         memset(buf, '\0', sizeof(buf)); 
         fflush(NULL);
     }
