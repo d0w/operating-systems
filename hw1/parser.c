@@ -202,7 +202,7 @@ int parseCommand(char *command, struct Command *obj, int isBegin, int isEnd) {
     //     obj->args = args;
     // }
 
-    return 1;
+    return 0;
 }
 
 // splits by |. Returns head of linked list of tokenized commands

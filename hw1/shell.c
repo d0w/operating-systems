@@ -90,59 +90,132 @@ int readCommand(char *buffer, int size, struct Pipeline *pipe, int usePrompt) {
     return 0;
 }
 
+int executeCommand(struct Command *cmd, int inFd, int wait) {
+    int filed[2];
+    pipe(filed);
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        // child process
+        // might need next line
+        // strcpy(command, "/bin/");
+        // strcat(command, curr->args[0]);
+        // char *arg[] = {"echo", "-e", "a\nb\nc", NULL};
+        // int response = execvp(arg[0], arg+1);
+        // printf("Command: %s\n", curr->args[0]);
+        // for (int i = 0; curr->args[i] != NULL; i++) {
+        //     printf("Arg: %s\n", curr->args[i]);
+        // }
+        // char *arg[] = {"echo", "yay", ">", "tes.txt", NULL};
+        // int response = execvp(arg[0], arg);
+
+        // handling input redirection. First create or open files needed for redirection
+        if(cmd->inPath) {
+            inFd = open(cmd->inPath, O_RDONLY);
+            if(inFd < 0 ) {
+                exit(2);
+            }
+        }
+        // output redirection
+        if(cmd->outPath) {
+            // permission bits -> owner (rw) / group (r) / other (r)
+            filed[1] = creat(cmd->outPath, 644);
+            if (filed[1] < 0) {
+                exit(3);
+            }
+        }
+
+        // redirect stdin to the read end of the pipe
+        dup2(inFd, STDIN_FILENO);
+
+        if(cmd->next) {
+            // if there is a next command, pipe the output of the current command to the next command
+            // by redirecting stdout to the write end of the pipe
+            // and redirecting stdin to the read end of the pipe
+            dup2(filed[1], STDOUT_FILENO);
+        } else if (cmd->outPath) {
+            // if output file, redirect stdout to the file
+            dup2(filed[1], STDOUT_FILENO);
+        }
+
+        // close pipe file descriptors
+        close(filed[0]);
+        close(filed[1]);
+
+        // execute command
+        if(execvp(cmd->args[0], cmd->args) < 0) {
+            fprintf(stderr, "ERROR: execvp failed\n");
+			exit(1);
+        }
+
+    } else if (pid < 0) {
+        fprintf(stderr,"ERROR: fork failed");
+        return -1;
+    } else {
+        // parent process
+        close(filed[1]);
+        if (inFd != STDIN_FILENO) {
+            close(inFd);
+        }
+
+        if (!wait) {
+            return 0;
+        }
+
+        int returnStatus;
+        if (waitpid(pid, &returnStatus, 0) == -1) {
+            fprintf(stderr, "ERROR: waitpid failed");
+            return -1;
+        }
+
+        // get return status from child process
+        if (WIFEXITED(returnStatus)) {
+            int exitStatus = WEXITSTATUS(returnStatus);
+            if (exitStatus != 0) {
+                fprintf(stderr, "ERROR: command failed with exit status: %d\n", exitStatus);
+                return -1;
+            }
+        } else {
+            fprintf(stderr, "ERROR: command did not exit normally\n");
+            return -1;
+        }
+
+        // set the input file descriptor to the read end of the pipe
+        inFd = filed[0];
+    }
+    return inFd;
+}
+
 int executePipeline(struct Pipeline *pipe) {
     struct Command *curr = pipe->commands;
     // struct Command *temp = curr;
-    int status;
+
+    int inFd = STDIN_FILENO;
+
+    // while (curr != NULL) {
+    //     printf("Command: %s\n", curr->args[0]);
+    //     for (int i = 0; curr->args[i] != NULL; i++) {
+    //         printf("Arg: %s\n", curr->args[i]);
+    //     }
+    //     printf("In: %s\n", curr->inPath);
+    //     printf("Out: %s\n", curr->outPath);
+    //     printf("Background: %d\n", pipe->background);
+    //     curr = curr->next;
+    // }
+    // curr = pipe->commands;
+
+    int status = 0;
 
     while (curr != NULL) {
-        printf("Command: %s\n", curr->args[0]);
-        for (int i = 0; curr->args[i] != NULL; i++) {
-            printf("Arg: %s\n", curr->args[i]);
-        }
-        printf("In: %s\n", curr->inPath);
-        printf("Out: %s\n", curr->outPath);
-        printf("Background: %d\n", pipe->background);
+        // get the input fd from the previous command and pass to the next
+        inFd = executeCommand(curr, inFd, 1);
         curr = curr->next;
+        // curr = NULL;
     }
-    curr = pipe->commands;
 
-
-
-    while (curr != NULL) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            // child process
-            // might need next line
-            // strcpy(command, "/bin/");
-            // strcat(command, curr->args[0]);
-            // char *arg[] = {"echo", "-e", "a\nb\nc", NULL};
-            // int response = execvp(arg[0], arg+1);
-            // printf("Command: %s\n", curr->args[0]);
-            // for (int i = 0; curr->args[i] != NULL; i++) {
-            //     printf("Arg: %s\n", curr->args[i]);
-            // }
-            // char *arg[] = {"echo", "yay", ">", "tes.txt", NULL};
-            // int response = execvp(arg[0], arg);
-            int response = execvp(curr->args[0], curr->args);
-            if (response != 0) {
-                fprintf(stderr, "ERROR: Command not found: %s\n", curr->args[0]);
-                exit(-1);
-            }
-        } else if (pid < 0) {
-            fprintf(stderr,"ERROR: fork failed");
-            return -1;
-        } else {
-            // parent
-
-            while (waitpid(pid, &status, 0) == -1) {
-                fprintf(stderr, "ERROR: waitpid failed");
-                return -1;
-            }
-            // printf("Child %d exited with status %d\n", pid, WEXITSTATUS(status));
-        }
-        // curr = curr->next;
-        curr = NULL;
+    // if we are not reading from stdin anymore, close the file descriptor
+    if (inFd != STDIN_FILENO) {
+        close(inFd);
     }
 
     // wait for all child processes to finish
