@@ -159,7 +159,7 @@ int executeCommand(struct Command *cmd, int inFd, int wait) {
         }
 
         if (!wait) {
-            return 0;
+            return filed[0];
         }
 
         int returnStatus;
@@ -208,7 +208,7 @@ int executePipeline(struct Pipeline *pipe) {
 
     while (curr != NULL) {
         // get the input fd from the previous command and pass to the next
-        inFd = executeCommand(curr, inFd, 1);
+        inFd = executeCommand(curr, inFd, !pipe->background);
         curr = curr->next;
         // curr = NULL;
     }
@@ -235,17 +235,20 @@ int shell(char *arg) {
         usePrompt = 0;
     }
 
+    struct sigaction sa;
+    sa.sa_handler = SIG_DFL;
+    sa.sa_flags = SA_NOCLDWAIT;
+    if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+        perror("sigaction");
+        exit(1);
+    }
+
     // pid_t pid;
     int status;
     while ((status = readCommand(buf, BUFSIZE, pipe, usePrompt)) >= 0) {
 
         if (status > 0) {
-            switch(status) {
-                case 5:
-                    break;
-                default:
-                    break;
-            }
+            // handle extra status messages here
         }
         else {
             // execute command logic here
@@ -256,6 +259,7 @@ int shell(char *arg) {
 
             // reinitialize pipeline
             pipe = initPipeline();
+
         }
         memset(buf, '\0', sizeof(buf)); 
         fflush(NULL);

@@ -8,6 +8,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #define BUFSIZE 512
 #define WORDSIZE 32
