@@ -21,14 +21,6 @@ struct Pipeline {
     int background;
 };
 
-
-// struct Process {
-//     char *name;
-//     char **args;
-//     int pid;
-//     int status;
-// };
-
 struct Command {
     // struct Process *process;
     struct Command *next;
@@ -40,6 +32,9 @@ struct Command {
 };
 
 int readCommand(char *buffer, int size, struct Pipeline *pipe, int usePrompt);
+int executeCommand(struct Command *cmd, int inFd, int wait);
+int executePipeline(struct Pipeline *pipe);
+void sigchldHandler(int sig);
 int shell(char *arg);
 struct Command *initCommand();
 struct Process *initProcess();

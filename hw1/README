@@ -2,87 +2,46 @@
 Derek Xu 
 U18821640
 
+# Explanation
+Read Mini-Deadline explanation for more info on parsing
+
+To give each command more context, I created a struct for a Pipeline and a Command. A pipeline is an entire command submitted by the user (command1 | command2| command 3) and a command is each individual command of that pipe. The pipeline simply holds info of the first item of the command linked list, and whether or not it is a background process (whether or not & is used). The Command holds the next command to run after it, an array of the arguments to run, the inPath and outPath which correspond where to redirect stdin and stdout.
+
+To expand off of the parsing, since we iterated over each character left->right, we can look for '>' and '<' characters and also reject parsing if we find another special character or nothing after it. When we find these characters, we set the inPath and outPath accordingly. To handle '&', I simply checked if the next token was a word. If yes, then return an error (not at end of line), if not, then set the Pipeline's background variable to true.
+
+After the command is parsed, we should get a pipeline of commands, each command having info on what to execute and where to redirect stdin and stdout. The executePipeline function loops through the pipe's commands and also holds the file descriptor of the previous command's output (read end of pipeline) and duplicates onto the stdin of the next command.
+
+In executeCommand, the function first creates the pipe file descriptors and forks a child to run the command. In the child, if there is an inPath or outPath, we redirect stdin and stdout to point to the files opened or created. If there is a next command, the stdout is redirected to the write end of the pipe so the next command can have its stdin redirected to the read end of the pipe and read the output of the previous command. execvp is then used to execute the command with stdin and stdout redirected if needed. In the parent, we close the write end of the pipeline and return the read end of the pipe so the next command can use it, if there are no commands, we close the entire pipe. This passing of the pipe's file descriptors is how we communicate between processes.
+
+Lastly, to handle background processes, we use the sigaction system call to handle background processes. We use a handler to receive the status codes of all background processes that have exited and use the SA_RESTART flag to prevent the interruption of the shell program to stop and just restart. When we execute a pipeline and it is to run in the background, we skip waiting for the return status (no waitpid is used immediately after execution).
+
+## Problems and Solutions
+The main problems were:
+- Redirecting stdin and stdout correctly with pipelines and '>' or '<' since files were not being read or not being created when they were supposed to
+  - Solved with experimentation and diagrams
+- Figuring out a way to pass the pipeline file descriptors to the next command so inter-process communication was possible. Previously had issues where the previous commands outputs were not getting passed
+  - Solved with adding a parameter to `executeCommand` to redirect stdin of the next command 
+- Figuring out the correct flags to use for sigaction so background processes were handled correctly since the program would end suddenly after catching a child process exit
+  - Looked up documentation and man page for sigaction to know to use SA_RESTART
+- Finding the right permission code for `creat` since the codes on the man page were not helpful.
+  - Looked up documentation and searched online for how to set the permission bits using octal codes
+- General debugging with the parser so it would handle the new special characters
+  - Solved with experimentation
+- Figuring out how to get all the correct information for a specific command since each command needed to know its arguments, inPath, outPath, etc.
+  - Use struct to hold fields that would give info of args, inpath, outpath, etc.
+
 # Mini-Deadline Explanation
-In the parser, I opted to use an FSM-like parsing style, where instead of trying to separate the using delimiters, the code will go character by character and perform actions depending on the character. In the code, by doing this, we can tokenize the string more easily (separate commands into arrays of words). It also lets the code easily know when to stop adding characters to a command and begin parsing a new command (aka when piping occurs). The parser essentially gets the next character type (after skipping whitespace) and if it doesn't hit a pipe, keep adding to the current command. Then once hitting a pipe, parse the command character by character, adding each character to its own element in an array. This tokenizing method will prove useful once we start working with files such as with >< as we can route commands right when we see them instead of having to separate the whole string.
+In the parser, I opted to use an FSM-like parsing style, where instead of trying to separate the using delimiters, the code will go character by character and perform actions depending on the character. In the code, by doing this, we can tokenize the string more easily (separate commands into arrays of words) as we need to deal with a variety of special characters. It also lets the code easily know when to stop adding characters to a command and begin parsing a new command (aka when piping occurs) or deal with redirecting stdout/stdin. The parser essentially gets the next character type (after skipping whitespace) and if it doesn't hit a pipe, keep adding to the current command. Then once hitting a pipe, parse the command character by character, adding each character to its own element in an array. This tokenizing method will prove useful once we start working with files such as with >< as we can route commands right when we see them instead of having to separate the whole string.
 
-The main problem with the sub-deadline was the autograder. My output was exact but still givin me errors. In the end, I solved it by fflush(stdout) after every print.
-
-# Submissions Guidelines
-Your shell must be written in C and run on Linux. It must compile without any
-warning/errors and run on ec440.bu.edu. (i.e., gcc -Werror will be in use)
-
-In your home directory create a folder (e.g., project1) and place README, makefile,
-myshell.c files (potentially, myshell.h) there. Switch to the project1 directory and
-execute submit1.
-
-A confirmation mail of your submission is sent to your account on ec440.bu.edu. You
-can read this mail by executing mail.
-
-To automatically test your solution, we execute make (no arguments will be provided to
-make). After make terminates, we execute the binary ./myshell for extensive testing.
-(Please make sure that executing make compiles your source code and generates a
-binary named myshell)
-
-In the README file explain what you did. If you had problems, tell us why and what.
-You are allowed to resubmit your files. The last submission before the deadline will be
-graded
-
-Do not forget that you must support the '-n' argument to suppress the output of the
-shell prompt for automated testing.
-
-# Specifications
-Design basic shell with commands
-1. `my_shell$` as prompt
-2. Be able to execute commands
-   1. Access binaries by searching directories determined by PATH environment var passed to shell
-   2. Commands have arguments
-3. Interpret/Execute '<' '>' '|' and '&'
-   1. '<'- Takes input from file
-   2. '>' - Output writes to file
-   3. '|' - Output from previous commands pipes (inputs) to next command
-   4. '&' Allows user to execute in background
-      1. Next command allowed immediately
-4. If error, display error message
-   1. ERROR: your_error_message
-      1. -n when starting shell program, shell doesn't output any command prompt (no"my_shell$")
-5. CTRL-D to exit shell
-6. Max length of commands/filenames is 32 chars, max length of input line is 512
-7. Collect exit codes of all processes it spawns
-8. Use fork(2) system call and execvp(2) to execute commands
-9. Use waitpid(2) or wait(2) to wait for program to complete execution
-10. Signals (SIGCHLD) for statuses of processes in background
+The main problem with the sub-deadline was the autograder. My output was exact but still giving me errors. In the end, I solved it by fflush(stdout) after every print.
 
 
-# Hints
-1. A simple shell such as this needs at least a simple command-line parser to figure out
-what the user is trying to do. To read a line from the user, you may use fgets(3).
-2. If a valid command has been entered, the shell should fork(2) to create a new (child)
-process, and the child process should exec the command.
-3. Before calling exec to begin execution, the child process may have to close stdin (file
-descriptor 0) or stdout (file descriptor 1), open the corresponding file or pipe (with
-open(2) for files, and pipe(2) for pipes), and use dup2(2) or dup(2) to make it the
-appropriate file descriptor. After calling dup2(2), close the old file descriptor.
-4. The main challenge of calling execvp(2) is to build the argument list correctly. If you
-use execvp(2), remember that the first argument in the array is the name of the
-command itself, and the last argument must be a null pointer.
-5. The easiest way to redirect input and output is to follow these steps in order:
-(a) open (or create) the input or output file (or pipe).
-(b) close the corresponding standard file descriptor (stdin or stdout).
-(c) use dup2 to make file descriptor 0 or 1 correspond to your newly opened file.
-(d) close the newly opened file (without closing the standard file descriptor).
-6. When executing a command line that requires a pipe, the pipe must be created before
-forking the child processes. Also, if there are multiple pipes, the command(s) in the
-middle may have both input and output redirected to pipes. Finally, be sure the pipe is
-closed in the parent process, so that termination of the process writing to the pipe will
-automatically close the pipe and send an EOF (end of file) to the process reading the
-pipe.
-7. Any pipe or file opened in the parent process may be closed as soon as the child is
-forked – this will not affect the open file descriptor in the child.
-8. While the project assignment talks about system calls, feel free to use the libc wrapper
-functions, documented in their corresponding beautiful man pages instead.
 
 # Resources Used
 [https://www.gnu.org/software/libc/manual/html_mono/libc.html#Implementing-a-Shell](https://www.gnu.org/software/libc/manual/html_mono/libc.html#Implementing-a-Shell)
+
+[https://stackoverflow.com/questions/18415904/what-does-mode-t-0644-mean](https://stackoverflow.com/questions/18415904/what-does-mode-t-0644-mean)
+- Used to figure out how to set permissions for creat()
 
 
 # Helpful notes
@@ -147,4 +106,88 @@ dup() syscall to duplicate file descriptors
 dup(2) - preferred method
   dup stdout to the write end of pipe, and dup stdin to read end of pipe
 dup(3) 
+
+
+
+
+
+
+
+<br />
+
+# Submissions Guidelines
+Your shell must be written in C and run on Linux. It must compile without any
+warning/errors and run on ec440.bu.edu. (i.e., gcc -Werror will be in use)
+
+In your home directory create a folder (e.g., project1) and place README, makefile,
+myshell.c files (potentially, myshell.h) there. Switch to the project1 directory and
+execute submit1.
+
+A confirmation mail of your submission is sent to your account on ec440.bu.edu. You
+can read this mail by executing mail.
+
+To automatically test your solution, we execute make (no arguments will be provided to
+make). After make terminates, we execute the binary ./myshell for extensive testing.
+(Please make sure that executing make compiles your source code and generates a
+binary named myshell)
+
+In the README file explain what you did. If you had problems, tell us why and what.
+You are allowed to resubmit your files. The last submission before the deadline will be
+graded
+
+Do not forget that you must support the '-n' argument to suppress the output of the
+shell prompt for automated testing.
+
+
+
+## Specifications
+Design basic shell with commands
+1. `my_shell$` as prompt
+2. Be able to execute commands
+   1. Access binaries by searching directories determined by PATH environment var passed to shell
+   2. Commands have arguments
+3. Interpret/Execute '<' '>' '|' and '&'
+   1. '<'- Takes input from file
+   2. '>' - Output writes to file
+   3. '|' - Output from previous commands pipes (inputs) to next command
+   4. '&' Allows user to execute in background
+      1. Next command allowed immediately
+4. If error, display error message
+   1. ERROR: your_error_message
+      1. -n when starting shell program, shell doesn't output any command prompt (no"my_shell$")
+5. CTRL-D to exit shell
+6. Max length of commands/filenames is 32 chars, max length of input line is 512
+7. Collect exit codes of all processes it spawns
+8. Use fork(2) system call and execvp(2) to execute commands
+9. Use waitpid(2) or wait(2) to wait for program to complete execution
+10. Signals (SIGCHLD) for statuses of processes in background
+
+
+## Hints
+1. A simple shell such as this needs at least a simple command-line parser to figure out
+what the user is trying to do. To read a line from the user, you may use fgets(3).
+2. If a valid command has been entered, the shell should fork(2) to create a new (child)
+process, and the child process should exec the command.
+3. Before calling exec to begin execution, the child process may have to close stdin (file
+descriptor 0) or stdout (file descriptor 1), open the corresponding file or pipe (with
+open(2) for files, and pipe(2) for pipes), and use dup2(2) or dup(2) to make it the
+appropriate file descriptor. After calling dup2(2), close the old file descriptor.
+4. The main challenge of calling execvp(2) is to build the argument list correctly. If you
+use execvp(2), remember that the first argument in the array is the name of the
+command itself, and the last argument must be a null pointer.
+5. The easiest way to redirect input and output is to follow these steps in order:
+(a) open (or create) the input or output file (or pipe).
+(b) close the corresponding standard file descriptor (stdin or stdout).
+(c) use dup2 to make file descriptor 0 or 1 correspond to your newly opened file.
+(d) close the newly opened file (without closing the standard file descriptor).
+6. When executing a command line that requires a pipe, the pipe must be created before
+forking the child processes. Also, if there are multiple pipes, the command(s) in the
+middle may have both input and output redirected to pipes. Finally, be sure the pipe is
+closed in the parent process, so that termination of the process writing to the pipe will
+automatically close the pipe and send an EOF (end of file) to the process reading the
+pipe.
+7. Any pipe or file opened in the parent process may be closed as soon as the child is
+forked – this will not affect the open file descriptor in the child.
+8. While the project assignment talks about system calls, feel free to use the libc wrapper
+functions, documented in their corresponding beautiful man pages instead.
 

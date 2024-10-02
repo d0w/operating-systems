@@ -37,6 +37,7 @@ int parseCommand(char *command, struct Command *obj, int isBegin, int isEnd) {
 
 
     while ((token = getTokenType(command, &tokenLength)) != T_NONE) {
+        // if quote, skip quote
         if (token == T_QUOTE) {
             command += tokenLength;
             continue;
@@ -47,6 +48,8 @@ int parseCommand(char *command, struct Command *obj, int isBegin, int isEnd) {
                 // fprintf(stderr, "ERROR: Invalid command. Cannot redirect input\n");
                 return -1;
             }
+
+            // skip over whitespace, token, then whitespace to next token
             command += strspn(command, WHITESPACE);
             command += tokenLength;
             command += strspn(command, WHITESPACE);
@@ -83,6 +86,7 @@ int parseCommand(char *command, struct Command *obj, int isBegin, int isEnd) {
 
             char *temp = strndup(command,tokenLength);
 
+            // to handle quotes that wrap around a word
             if (temp[0] == '"' && temp[strlen(temp)-1] == '"') {
                 if (temp[0] == '"') {
                     args[idx] = strndup(command+1, tokenLength-1);
@@ -112,96 +116,6 @@ int parseCommand(char *command, struct Command *obj, int isBegin, int isEnd) {
     args[idx] = NULL;
     obj->args = args;
 
-        // // redirection handling
-        // // idea is to loop through the command again and find all instances of > or < used for redirection
-        // int redirectIn = 0;
-        // int redirectOut = 0;
-        // do {
-        //     size_t tokenLength = 0;
-        //     enum tokenType token = getTokenType(command, &tokenLength);
-
-        //     if (token != T_LEFT_ARROW && token != T_RIGHT_ARROW) {
-        //         return 0;
-        //     }
-        //     command += strspn(command, WHITESPACE);
-        //     command += tokenLength;
-        //     command += strspn(command, WHITESPACE);
-
-        //     if (token == T_LEFT_ARROW) {
-        //         if (!isBegin || !(isEnd && isBegin)) {
-        //             fprintf(stderr, "ERROR: Invalid command. Cannot redirect input\n");
-        //             return -1;
-        //         }
-        //         token = getTokenType(command, &tokenLength);   
-        //         if (token != T_WORD) {
-        //             fprintf(stderr, "ERROR: Invalid command. Expected source for redirect\n");
-        //             return -1;
-        //         }
-        //         obj->inPath = strndup(command, tokenLength);
-                
-        //     } else if (token == T_RIGHT_ARROW) {
-        //         if (!isEnd || !(isEnd && isBegin)) {
-        //             fprintf(stderr, "ERROR: Invalid command. Cannot redirect output\n");
-        //             return -1;
-        //         }
-        //         token = getTokenType(command, &tokenLength);
-        //         if (token != T_WORD) {
-        //             printf("Token: %d\n", token);
-        //             fprintf(stderr, "ERROR: Invalid command. Expected destination for redirect\n");
-        //             return -1;
-        //         }
-        //         obj->outPath = strndup(command, tokenLength);
-        //     }
-        // } while ((token = getTokenType(command, &tokenLength)) != T_NONE && token != T_NEXT);
-        // if (redirectIn == -1 || redirectOut == -1) {
-        //     return -1;
-        // }
-    // if not begin or end, don't allow redirection (just treat like normal char)
-    // else {
-    //     // loop through command and separate by special characters, checking validity
-    //     while ((token = getTokenType(command, &tokenLength)) != T_NONE) {
-    //         if (token == T_QUOTE) {
-    //             command += tokenLength;
-    //             continue;
-    //         }
-
-    //         else {
-
-    //             // get rid of leading whitespace
-    //             command += strspn(command, WHITESPACE);
-
-    //             char *temp = strndup(command,tokenLength);
-
-    //             if (temp[0] == '"' && temp[strlen(temp)-1] == '"') {
-    //                 if (temp[0] == '"') {
-    //                     args[idx] = strndup(command+1, tokenLength-1);
-    //                 } else if (temp[strlen(temp)-1] == '"') {
-    //                     args[idx] = strndup(command, tokenLength-1);
-    //                 }
-    //             // args[idx] = strndup(command+1, tokenLength-2);
-    //             } else {
-    //                 args[idx] = strndup(command, tokenLength);
-    //             }
-                
-    //             command += tokenLength;
-    //             idx++;
-
-    //             // remove after mini deadline
-    //             // if ((tempToken = getTokenType(command, &tempLen)) == T_NONE) {
-    //             //     printf("%s", temp);
-    //             // } else {
-    //             //     printf("%s ", temp);
-    //             // }
-
-    //             free(temp);
-    //         }
-
-
-    //     }
-    //     args[idx] = NULL;
-    //     obj->args = args;
-    // }
-
     return 0;
 }
 
@@ -211,7 +125,9 @@ struct Command *parseLine(char *buffer, int *background) {
     struct Command *current = NULL;
     struct Command *prev = NULL;
 
+    // Used to keep track of the start of the next command
     char *bufferStart = buffer + strspn(buffer, WHITESPACE);
+
     size_t tokenLength = 0;
     int len = 0;
     enum tokenType token;
@@ -228,8 +144,17 @@ struct Command *parseLine(char *buffer, int *background) {
             break;
         }
         if (token == T_AMP) {
+            // check if we are the end of the line
+            buffer += strspn(buffer, WHITESPACE);
+            buffer += tokenLength;
+            if (getTokenType(buffer, &tokenLength) != T_NONE) {
+                fprintf(stderr, "ERROR: Invalid command. & must be at the end of the line\n");
+                return NULL;
+            }
+
             *background = 1;
-            len--;
+
+            // len--;
         }
         //
         if (token == T_PIPE) {
@@ -245,14 +170,14 @@ struct Command *parseLine(char *buffer, int *background) {
                 return NULL;
             }
 
-            // Create a new command for previous part
-            // current = (struct Command *)malloc(sizeof(struct Command));
+            // Create a new command for command up to | 
             current = initCommand();
             int res = parseCommand(strndup(bufferStart, len), current, first, last);
             current->next = NULL;
 
             if (res == -1) {
                 fprintf(stderr, "ERROR: Invalid command. Could not parse command\n");
+                cleanCommand(current);
                 return NULL;
             }
 
@@ -288,6 +213,7 @@ struct Command *parseLine(char *buffer, int *background) {
 
         if (res == -1) {
             fprintf(stderr, "ERROR: Invalid command. Could not parse command\n");
+            cleanCommand(current);
             return NULL;
         }
 

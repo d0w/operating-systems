@@ -1,5 +1,6 @@
 #include "parser.h"
 
+// Pipeline and Command Struct initialiazations and clean up functions
 struct Pipeline* initPipeline() {
 	struct Pipeline* pipe = malloc(sizeof(struct Pipeline));
 
@@ -43,8 +44,10 @@ int cleanCommand(struct Command *command) {
 
 
 
-// read command from stdin or file
-// FILE *stream
+/**
+ * Reads a command from the user and parses it into a pipeline of commands
+ * @return 0 if successful, -1 if EOF
+ */
 int readCommand(char *buffer, int size, struct Pipeline *pipe, int usePrompt) {
     if (usePrompt) {
         printf("my_shell$ ");
@@ -55,59 +58,26 @@ int readCommand(char *buffer, int size, struct Pipeline *pipe, int usePrompt) {
         return -1;
         // exit(0);
     }
-    // print out buffer char by char
-    // for (int i = 0; buffer[i] != '\0'; i++) {
-    //     printf("%c ", buffer[i]);
-    // }
+
     int background = 0;
     pipe->commands = parseLine(buffer, &background); // calls parser.c function
     pipe->background = background;
 
-
-
-    // struct Command *curr = pipe->commands;
-
-    // if (curr == NULL) {
-    //     return 5;
-    // }
-
-    // while(curr != NULL) {
-    //     char **commandPtr = curr->args;
-    //     while (*commandPtr != NULL) {
-    //         printf("%s ", *commandPtr);
-    //         commandPtr++;
-    //     }
-    //     printf("\n");
-    //     curr = curr->next;
-    // }
-
-
-    // print debugging
-    
-    // do command logic here
-
-    // free(curr);
     return 0;
 }
 
+/**
+ * Executes a command and returns the file descriptor for the next command's stdin
+ * Forks a child process to execute the command. Uses pipes for inter-process communication
+ * @return file descriptor for the next command's stdin if successful, -1 if error
+ */
 int executeCommand(struct Command *cmd, int inFd, int wait) {
     int filed[2];
     pipe(filed);
 
     pid_t pid = fork();
     if (pid == 0) {
-        // child process
-        // might need next line
-        // strcpy(command, "/bin/");
-        // strcat(command, curr->args[0]);
-        // char *arg[] = {"echo", "-e", "a\nb\nc", NULL};
-        // int response = execvp(arg[0], arg+1);
-        // printf("Command: %s\n", curr->args[0]);
-        // for (int i = 0; curr->args[i] != NULL; i++) {
-        //     printf("Arg: %s\n", curr->args[i]);
-        // }
-        // char *arg[] = {"echo", "yay", ">", "tes.txt", NULL};
-        // int response = execvp(arg[0], arg);
+
 
         // handling input redirection. First create or open files needed for redirection
         if(cmd->inPath) {
@@ -118,8 +88,9 @@ int executeCommand(struct Command *cmd, int inFd, int wait) {
         }
         // output redirection
         if(cmd->outPath) {
+            // create/overwrite file and set read end of pipe to write to file
             // permission bits -> owner (rw) / group (r) / other (r)
-            filed[1] = creat(cmd->outPath, 644);
+            filed[1] = creat(cmd->outPath, 0644);
             if (filed[1] < 0) {
                 exit(3);
             }
@@ -131,7 +102,6 @@ int executeCommand(struct Command *cmd, int inFd, int wait) {
         if(cmd->next) {
             // if there is a next command, pipe the output of the current command to the next command
             // by redirecting stdout to the write end of the pipe
-            // and redirecting stdin to the read end of the pipe
             dup2(filed[1], STDOUT_FILENO);
         } else if (cmd->outPath) {
             // if output file, redirect stdout to the file
@@ -149,43 +119,56 @@ int executeCommand(struct Command *cmd, int inFd, int wait) {
         }
 
     } else if (pid < 0) {
-        fprintf(stderr,"ERROR: fork failed");
+        perror("ERROR: fork");
         return -1;
     } else {
         // parent process
         close(filed[1]);
+
+        // close inFd if it opened a file
         if (inFd != STDIN_FILENO) {
             close(inFd);
         }
 
+        if (!cmd->next) {
+            // if there are no more commands, close the pipe
+            close (filed[0]);
+        }
+
+        // for background processes, return the read end of the pipe
         if (!wait) {
             return filed[0];
         }
 
+        // wait for child process to finish. use while loop in case there are multiple child processes
         int returnStatus;
-        if (waitpid(pid, &returnStatus, 0) == -1) {
-            fprintf(stderr, "ERROR: waitpid failed");
+        while (waitpid(pid, &returnStatus, 0) == -1) {
+            perror("ERROR: waitpid");
             return -1;
         }
 
         // get return status from child process
-        if (WIFEXITED(returnStatus)) {
+        if (WIFEXITED(returnStatus)) {  
             int exitStatus = WEXITSTATUS(returnStatus);
-            if (exitStatus != 0) {
-                fprintf(stderr, "ERROR: command failed with exit status: %d\n", exitStatus);
+            if (exitStatus < 0) {
+                perror("ERROR: command exited with errors");
                 return -1;
             }
         } else {
-            fprintf(stderr, "ERROR: command did not exit normally\n");
+            perror("ERROR: command did not exit properly");
             return -1;
         }
 
-        // set the input file descriptor to the read end of the pipe
+        // set the input file descriptor to the read end of the pipe for the next command
         inFd = filed[0];
     }
     return inFd;
 }
 
+/**
+ * Executes a pipeline of commands
+ * @return 0 if successful, -1 if error
+ */
 int executePipeline(struct Pipeline *pipe) {
     struct Command *curr = pipe->commands;
     // struct Command *temp = curr;
@@ -206,9 +189,13 @@ int executePipeline(struct Pipeline *pipe) {
 
     int status = 0;
 
+    // loop through all commands in the pipeline
     while (curr != NULL) {
-        // get the input fd from the previous command and pass to the next
+        // get the input fd from the previous command and pass to the next if stdin needs to be redirected
         inFd = executeCommand(curr, inFd, !pipe->background);
+        if (inFd < 0) {
+            return -1;
+        }
         curr = curr->next;
         // curr = NULL;
     }
@@ -218,11 +205,21 @@ int executePipeline(struct Pipeline *pipe) {
         close(inFd);
     }
 
-    // wait for all child processes to finish
-    // while (wait(&status) > 0);
-    // while (wait(&status))
 
     return status;
+}
+
+// signal handler
+void sigchldHandler(int sig) {
+    int status;
+
+    // collect all child processes that have finished with no hang to prevent blocking
+    while (waitpid(-1, &status, WNOHANG) > 0);
+
+
+    // if (WIFEXITED(status)) {
+    //     printf("Child exited with status %d\n", WEXITSTATUS(status));
+    // }
 }
 
 // main shell
@@ -235,11 +232,12 @@ int shell(char *arg) {
         usePrompt = 0;
     }
 
+    // create a signal handler for SIGCHLD
     struct sigaction sa;
-    sa.sa_handler = SIG_DFL;
-    sa.sa_flags = SA_NOCLDWAIT;
+    sa.sa_handler = sigchldHandler;
+    sa.sa_flags = SA_RESTART;
     if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-        perror("sigaction");
+        perror("ERROR: sigaction");
         exit(1);
     }
 
