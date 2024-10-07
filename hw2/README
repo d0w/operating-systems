@@ -1,0 +1,43 @@
+# Author
+Derek Xu
+
+# Project Description
+**Due Tuesday, October 22nd**
+
+Basic thread system for Linux. Threads share same heap memory, open FDs, process identifiers. Each thread has own context, with set of CPU reg and stack. Commonly used is POSIX threads.
+
+Project is to implement small subset of pthread API in user-mode.
+
+```
+int pthread_create(
+    pthread_t *thread,
+    const pthread_attr_t *attr,
+    void *(*start_routine) (void *),
+    void *arg
+);
+```
+- Creates new thread within a process. 
+- On success, stores ID of created thread in location referenced by `thread`
+- `attr` is always NULL
+- Createw new thread context, and executes `start_routine` with `arg` as its argument. 
+- If `start_routine` returns, effect is there was an implicit call to `pthread_exit()` using return value of `start_routine` as exit status. 
+- Note that the thread in which `main()` was originally
+invoked differs from this. When it returns from `main()`, the effect shall be as if there was an
+implicit call to `exit()` using the return value of `main()` as the exit status.
+
+
+
+```
+void pthread_exit(void *value_ptr);
+```
+- Function terminates the callig thread. Ignore value passed in as first argument and clean up all info related to the terminating thread. 
+- Process exits with status of 0 after last thread has been terminated.
+- Behavior shall be as if implementation called `exit()` sith zero argument at thread termination time.
+
+
+```
+pthread_t pthread_self(void);
+```
+- Function shall return thread ID of calling thread. 
+
+
