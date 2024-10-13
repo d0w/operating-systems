@@ -41,3 +41,119 @@ pthread_t pthread_self(void);
 - Function shall return thread ID of calling thread. 
 
 
+# Possible Solutions
+- Preemptive user mode library (clock interrupt)
+- No kernel necessary
+- Multiple threads run in same process
+  - Threads share common addres space, opefn files, process, user, group IDs
+  - Own context of code, PC, set of registers,s tack
+
+Implement Three pthreads
+
+Shcedul threads
+- context switch every 50ms in round robin
+
+In total
+1. pthread_create()
+2. pthread_exit()
+3. pthread_self()
+4. schedule()
+
+Go from pthread_create, schedule(), pthread_exit, pthread_self (1 line of code)
+
+pthread_create
+- Create new thread context and set it to READY
+- Create context 
+  - Registers
+    - Captured in jump_buf
+  - stack
+    - mmap or malloc
+  - TCP also needs
+    - state (READY, EXITED, RUNNING, ETC.)
+    - exit status of thread (constant 0 for proj2)
+  - First time call pthread_craete, need to make things schedulable, so create TCB for main as well
+- Create new TCB
+  - Stack: Draw stack diagram of empty stack at pthread_create()
+  - Registers ,in particular
+    - PC - program counter
+    - SP - stack pointer
+    - How? jmp_buf from setjmp/longjmp
+  - TCB initialized, set READY state
+  - Call schedule()
+- First time called
+  - Set up all data structure
+  - Set up scheduler
+  - Make TCP for main thread (main)
+1. Create stack, get stack pointer
+2. call setjmp
+3. Mangle stack ptr
+4. Set jmp_buf stack ptr to mangled ptr
+   1. only stack pointer and PC
+5. set jmp_buf to other things
+
+pthread_exit
+- Clean up all resources that were allocated for this tread in pthread_create (The TCB)
+- Freall all resources for current thread
+- Set thread's state to EXIT
+- Must automatically be called when start_routine finishes
+  - When returning from code, set IP to the 
+
+pthread_self
+pthread_t pthread_self(void) {
+    return gCurrent;
+}
+- return gCurrent
+
+schedule
+- Context switches between threads (round-robin) that is READY
+- Schedule every 50ms
+- Set an alarm goes off every 50ms
+- in handler: sigaction to catch alarm signal
+  - preserves context of currently executing thread
+  - choose next thread to run
+  - context switch to new thread
+- Must schedule 
+  - thread exits
+  - thread blocks
+- may schedule
+  - new thread is created
+  - I/o interrupt
+  - clock interrupt
+
+struct thread { 
+    thread id
+    info about state of thread (registers)
+    info about stack (point to threads stack area)
+    info about status of thread (ready, running, exited)
+}
+each PCB has jmp_buf for long and setjmp
+
+
+
+
+
+Build threading library and an example program to test recently added functionality during development
+- Thread 1 count from 1 -> 50 gazillion
+- Thread 2 count form 1 -> 50 gazillion
+- Counts should increment separately, print every so and so 
+- Use bandit /usr/local/ec440/proj2/sample-program (remove pthread_join func)
+
+Execution | Implementation Task
+1. Program starts | nothing
+2. Launches n threads | pthread_create()
+3. Schedule threads so each gets fair share | schedule()
+4. Threads that complete exit | pthread_exit()
+5. Program collects results from threads | nothing
+6. program exits | pthread_exit() "special" case (depends on which thread exits last)
+
+
+Compile test
+$ gcc -Werror -Wall -g -c -o threads.o threads.c
+
+Link
+$ gcc -Werror -Wall -g -o main main.c threads.o
+
+Get it from /usr/local/ec440/proj2/makefile
+
+
+
