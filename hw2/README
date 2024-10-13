@@ -93,7 +93,7 @@ pthread_create
 
 pthread_exit
 - Clean up all resources that were allocated for this tread in pthread_create (The TCB)
-- Freall all resources for current thread
+- Free all resources for current thread
 - Set thread's state to EXIT
 - Must automatically be called when start_routine finishes
   - When returning from code, set IP to the 
