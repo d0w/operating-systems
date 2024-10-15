@@ -9,9 +9,9 @@ void *count(void *arg) {
 	unsigned long int c = (unsigned long int)arg;
 	int i;
 	for (i = 0; i < c; i++) {
-		if ((i % 1000) == 0) {
-			printf("tid: 0x%x Just cffffounted to %d of %ld\n", \
-			(unsigned int)pthread_self(), i, c);
+		if ((i % 10000) == 0) {
+			// printf("i: %d\n", i);
+			printf("tid: 0x%x Just counted to %d of %ld\n", (unsigned int)pthread_self(), i, c);
 		}
 	}
     return arg;

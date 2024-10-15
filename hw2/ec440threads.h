@@ -20,7 +20,7 @@
 
 
 #define MAX_THREADS 128
-#define STACK_SIZE 32767
+#define MAX_STACK_SIZE 32767
 #define QUANTUM 50000 // 50000 microseconds = 50 milliseconds
 
 
@@ -31,14 +31,14 @@ enum threadStatus {
     EXITED
 };
 
-struct TCB {
+typedef struct TCB {
     pthread_t tid;
     jmp_buf context;
     enum threadStatus status;
     
     // allocated stack
     void *stack;
-};
+} TCB;
 
 // ------------------ LIBRARY -----------------
 /**
