@@ -1,7 +1,50 @@
 # Author
 Derek Xu
+U18821640
 
-# Project Description
+# HW 3 Solution
+To implement the lock and unlock, the program uses sigprocmask with a filled mask to prevent any signals from interrupting the program. Unlock empties a mask and calls sigprocmask on an empty mask to allow signals to enter again.
+
+For pthread_join, the function first locks to prevent race conditions. Then runs a loop that continuously checks if the thread given has EXITED or not. If not, reschedule another thread. Once the given thread exits, we can set the value_ptr to the return value specified in the TCB. Then the memory of the terminating thread is freed and removed from the threads array. Unlock to allow other threads to run again. 
+
+To get the return value, the pthread_exit_wrapper is used as the new exit pointer (top of the stack) of the thread since it needs to be implicitly called. This gets the return value and sends it to pthread_exit, where pthread_exit notes the thread as EXITED and sets the TCB's return value to whatever value_ptr is and reschedules.
+
+For Semaphores, a new struct is created to hold the value, the queue, and whether or not the semaphore is initialized. All semaphore functions use lock() and unlock() to simulate atomic operations. sem_init creates a Semaphore, initialies the values, and sets the sem->__align to the new semaphore pointer. 
+
+sem_wait tries the decrement the semaphore. If the semaphore is at 0, then instead of decrementing, add the thread to the semaphore's queue and set it to blocked. Then reschedule to find another thread to run.
+
+sem_post starts by incrementing the semaphore. If the value is greater than 0 after the increment, then consume the start of the semaphore's queue and set that thread to READY for scheduling since the critical section has been left and semaphore is above 0.
+
+sem_destroy checks if initialized is 1 so that it does not destroy semaphores not initialized by sem_init. Then it frees the queue of the semaphore and then the semaphore itself.
+
+## Problems
+There were issues with the pthread_join function in which the calling thread was still exiting before the joined threads finished. To fix this, I had to ensure that the function ran in a loop to keep checking if the joined thread ended and reschedule if it hasn't. At first I set the thread to BLOCKED, but it was difficult to figure out how to reschedule the calling thread to check if the other thread ended. 
+
+For the Semaphores, it was difficult to figure out a queue system. Ended up implementing a queue using linked lists.
+
+
+
+# HW 2 Solution
+To create the threading library, I followed the procedures loosely defined in the possible solutions section.
+
+The globals are defined as a gThreads array which holds array of threads. In this case, we assign thread ids by the index they are in this array. There is also the gCurrent which is the current threads id and the signal handler for the timer.
+
+For pthread_create, I first use a static variable (essentially a global variable) to check if we initialized threading yet which occurs when the main program first creates a thread. This initializes the threading library by setting the main thread to the first thread in the gThreads array, set its state to RUNNING, and set the current thread to 0 (main thread id). Then the timer and the signal handler that handles the SIGALRM signal are initialized.
+
+For the rest of the pthread_create function, the function first loops through the gThreads array to find an empty slot and use the index of that slot as the thread's id. Then a TCB is created to hold info on the thread. A stack is allocated for the thread as well. Then the thread is added to the gThreads array. To facilitate the implicit call to the pthread_exit function, the function then finds the top of the allocated stack, goes down 1 function pointer size and copies a function pointer to the pthread_exit function at the location found before. This places a function pointer to the end of the stack so that the exit function is implicitly called after the start_routine is finished. Then the TCBs jmp_buf is modified by placing the start_thunk routine at the PC, arg in R13, start_routine in R12, and the stack pointer (pointing right below the pthread_exit function pointer) to RSP. Then the thread is set to READY for the scheduler. These register values are defined in the homework specification.
+
+The pthread_exit function sets the status of the current thread to EXITED and frees the TCB and stack used by the thread. Then it clears the gThreads position that it was holding and then calls schedule to ensure it does not block other ready threads from starting. Then it exits.
+
+pthread_self simply returns gCurrent, the global variable holding the currently running thread.
+
+The schedule function first takes the current thread, and sets it to READY if it was previously running. Then it saves the context of the current thread by calling setjmp (as long it's not EXITED). If setjmp is 0, then it is saving the thread's context and needs to find the next thread to schedule. If setjmp is not 0, then we are returning from a longjmp and thus we don't need to find another thread and continue the thread's running. To find the next thread using round robin, it simply increments gCurrent until it finds a thread that is READY. Once that index is found, the scheduler sets that thread to RUNNING, changes the current thread id to that thread's id, and then makes a longjmp to that thread's context so that there is a context switch.
+
+## Problems
+One of the main issues was of course segmentation faults when switching threads. The issue was mainly involved with understanding the stack allocation and where to place the function pointer to the exit function, as well as ensuring that the pointer was copied correctly into the stack.
+
+Another issue was that the scheduler was not preemptively switching contexts and the threads were running to completion before switching. This was mainly since the schedule function would just completely run every time no matter if we were saving or switching contexts, so returning from the schedule if we are returning from a jump was the way to fix this. Also, calling schedule again when the thread is exiting ensures that exited threads don't block a new thread from entering.
+
+# Project Description (HW2 only)
 **Due Tuesday, October 22nd**
 
 Basic thread system for Linux. Threads share same heap memory, open FDs, process identifiers. Each thread has own context, with set of CPU reg and stack. Commonly used is POSIX threads.
@@ -39,6 +82,10 @@ void pthread_exit(void *value_ptr);
 pthread_t pthread_self(void);
 ```
 - Function shall return thread ID of calling thread. 
+
+
+# Project 3 Description
+
 
 
 # Possible Solutions

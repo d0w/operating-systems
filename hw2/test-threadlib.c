@@ -9,7 +9,7 @@ void *count(void *arg) {
 	unsigned long int c = (unsigned long int)arg;
 	int i;
 	for (i = 0; i < c; i++) {
-		if ((i % 10000) == 0) {
+		if ((i % 100000) == 0) {
 			// printf("i: %d\n", i);
 			printf("tid: 0x%x Just counted to %d of %ld\n", (unsigned int)pthread_self(), i, c);
 		}
@@ -28,11 +28,12 @@ int main(int argc, char **argv) {
 	}
 
     //join all threads ... not important for proj2
-	//for(i = 0; i<THREAD_CNT; i++) {
-	//	pthread_join(threads[i], NULL);
-	//}
+	for(i = 0; i<THREAD_CNT; i++) {
+		pthread_join(threads[i], NULL);
+	}
     // But we have to make sure that main does not return before 
     // the threads are done... so count some more...
-    count((void *)(cnt*(THREAD_CNT + 1)));
+    // count((void *)(cnt*(THREAD_CNT + 1)));
+	// pthread_exit(NULL);
     return 0;
 }

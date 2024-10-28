@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <semaphore.h>
 
 #define JB_RBX 0
 #define JB_RBP 1
@@ -38,7 +39,23 @@ typedef struct TCB {
     
     // allocated stack
     void *stack;
+
+    // return value
+    void *returnVal;
 } TCB;
+
+typedef struct Queue {
+    TCB *thread;
+    struct Queue *next;
+} Queue;
+
+typedef struct Semaphore{
+    int value;
+    struct Queue *head;
+    struct Queue *tail;
+    int initialized;
+} Semaphore;
+
 
 // ------------------ LIBRARY -----------------
 /**
@@ -90,11 +107,37 @@ zero argument at thread termination time.
  */
 void pthread_exit(void *value_ptr);
 
+
 /**
  * Returns the thread ID of the calling thread.
  * @return Thread ID of the calling thread
  */
 pthread_t pthread_self(void);
+
+/**
+ * Makes calling thread wait for joined thread to finish before exiting
+ */
+int pthread_join(pthread_t thread, void **value_ptr);
+
+/**
+ * Prevents thread from being ended until the thread is unlocked.
+ */
+void lock();
+
+/**
+ * Unlocks the thread so it can be ended/switched
+ */
+void unlock();
+
+int sem_init(sem_t *sem, int pshared, unsigned value);
+
+int sem_wait(sem_t *sem);
+
+int sem_post(sem_t *sem);
+
+int sem_destroy(sem_t *sem);
+
+void pthread_exit_wrapper();
 
 
 

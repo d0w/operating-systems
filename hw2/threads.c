@@ -10,6 +10,21 @@ struct sigaction sa;
 
 // ------------------ FUNCTIONS -------------------------
 
+void lock() {
+    // prevent thread from being switched out of
+    sigset_t mask;
+    sigfillset(&mask);
+    sigprocmask(SIG_SETMASK, &mask, NULL);
+}
+
+void unlock() {
+    // allow thread to be switched out of
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigprocmask(SIG_SETMASK, &mask, NULL);
+}
+
+
 // func documentation in header file
 int setRegister(jmp_buf *context, int reg, unsigned long int value) {
     // set registers
@@ -63,11 +78,14 @@ void schedule() {
     // int checkedAll = 0;
     int count = 0;
     while (gThreads[next] == NULL || gThreads[next]->status != READY) {
+        if (gThreads[next] == NULL) {
+            count++;
+        }
         next = (next + 1) % MAX_THREADS;
 
         // if there are no more threads open, exit
         if (count == MAX_THREADS) {
-            exit(0);
+            // exit(0);
         }
     }
 
@@ -158,13 +176,9 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start_
     // want to place address of pthread_exit at the top of the stack
     
     // find stack top (growing down) and go down by one function pointer
-    void *stackTop = newThread->stack + MAX_STACK_SIZE;
-    void *stackPtr = stackTop - sizeof(void *);
-    void (*exitPtr)(void *) = (void *) &pthread_exit;
-    
-    // get pointer to pthread exit
-    // copy pthread exit pointer into the stack so it is called when start_routine is done
-    memcpy(stackPtr, &exitPtr, sizeof(void *));
+    unsigned long int *stackPtr = newThread->stack + MAX_STACK_SIZE;
+    stackPtr -= 1;
+    *stackPtr = (unsigned long int) &pthread_exit_wrapper;
 
 
     // set context into jmp_buf
@@ -184,69 +198,173 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start_
     // printf("Thread %d context: %p\n", id, &(newThread->context));
 
     return 0;
+}
 
-
-
-
-    // static int initialized = 1;
-    // if (initialized) {
-    //     initialized = 0;
-    //     initializeThreading();
-    // }
-    
-    // int ii = 1;
-    // for(ii = 1; gThreads[ii] != NULL; ii++) {
-    //     if(ii == MAX_THREADS - 1) {
-    //         printf("max treads reached!");
-    //         return -1;
-    //     }
-    // }
-
-    // *thread = ii;
-    // struct TCB* newthread = malloc(sizeof(struct TCB));
-    // newthread->stack = malloc(MAX_STACK_SIZE);
-    // gThreads[ii] = newthread;
-    
-    // setRegister(&(newthread->context), JB_PC, (unsigned long int)start_thunk);
-    // setRegister(&(newthread->context), JB_R13, (unsigned long int)arg);
-    // setRegister(&(newthread->context), JB_R12, (unsigned long int)start_routine);
-    
-    // //move the prethread_exit to the bottom of the stack
-    // void *bottom_of_stack = newthread->stack + MAX_STACK_SIZE;
-    // void *stack_pointer = bottom_of_stack - sizeof(&start_routine);
-    // void (*func)(void*) = (void*) &pthread_exit;
-    
-    // //move the new stackpointer to the stack
-    // memcpy(stack_pointer, &func, sizeof(func));
-    // setRegister(&(newthread->context), JB_RSP, (unsigned long int)stack_pointer);
-    
-    // newthread->tid = ii;
-    // newthread->status = READY;
-
-    // return 0;
+// gets return value of thread
+void pthread_exit_wrapper()
+{
+    unsigned long int res;
+    asm("movq %%rax, %0\n":"=r"(res));
+    pthread_exit((void *) res);
 }
 
 void pthread_exit(void *value_ptr) {
-    // set status
+    lock();
     gThreads[gCurrent]->status = EXITED;
 
-    // free values in TCB
-    free(gThreads[gCurrent]->stack);
-    free(gThreads[gCurrent]);
-    gThreads[gCurrent] = NULL;
-
-    if (gThreads[gCurrent] != NULL) {
-        fprintf(stderr, "Error freeing thread: %ld", gCurrent);
+    if(value_ptr) {
+        gThreads[gCurrent]->returnVal = value_ptr;
     }
-
-    // reschedule for next thread and then exit
+    gThreads[gCurrent]->status = EXITED;
+    unlock();
     schedule();
     exit(0);
-}
 
+
+    // int i;
+    // int allNull = 1;
+    // for (i = 0; i < MAX_THREADS; i++) {
+    //     if (gThreads[i] != NULL) {
+    //         allNull = 0;
+    //     }
+    // }
+    // if (allNull) {
+    //     exit(0);
+    // }
+    // while(1) {
+    //     schedule();
+    // }
+    // schedule();
+    // exit(0);
+}
 
 pthread_t pthread_self(void) {
     return gCurrent;
+}
+
+int pthread_join(pthread_t thread, void **value_ptr) {
+    // lock to prevent race condition
+    lock();
+    // pthread_t current = pthread_self();
+
+    // check if thread is valid
+    if (thread < 0 || thread >= MAX_THREADS || gThreads[thread] == NULL) {
+        unlock();
+        return -1; // Invalid thread ID
+    }
+
+
+    // wait for thread to exit by checking if status is exited
+    // this is essentially a blocked thread
+    while (gThreads[thread]->status != EXITED) {
+        // if not exited, unlock and schedule another thread
+        unlock();
+        schedule();
+        lock();
+    }
+
+
+    // gThreads[current]->status = READY;
+
+    // set returnVal to return value of thread
+    if (value_ptr != NULL) {
+        *value_ptr = gThreads[thread]->returnVal;
+    }
+
+    // free memory and set to NULL
+    free(gThreads[thread]->stack);
+    free(gThreads[thread]);
+    gThreads[thread] = NULL;
+
+    unlock();
+    return 0;
+
+}
+
+int sem_init(sem_t *sem, int pshared, unsigned value) {
+    // intialiaze semaphore with value and queue
+    Semaphore *newSem = malloc(sizeof(Semaphore));
+    newSem->value = value;
+    newSem->head = NULL;
+    newSem->tail = NULL;
+    newSem->initialized = 1;
+    sem->__align = (unsigned long int)newSem;
+    return 0;
+}
+
+int sem_wait(sem_t *sem) {
+    lock();
+    // decrement value of semaphore if greater than 0
+    Semaphore *curr = (Semaphore *)sem->__align;
+    if (curr->value > 0) {
+        curr->value--;
+    } else {
+        // if value is 0, dont decrement and block thread
+        // Add the current thread to the waiting queue
+        Queue *newItem = malloc(sizeof(Queue));
+        newItem->thread = gThreads[gCurrent];
+        newItem->next = NULL;
+        if (curr->tail) {
+            curr->tail->next = newItem;
+        } else {
+            curr->head = newItem;
+        }
+        curr->tail = newItem;
+        gThreads[gCurrent]->status = BLOCKED;
+
+        // unlock and schedule another thread
+        unlock();
+        schedule();
+        lock();
+    }
+    unlock();
+    return 0;
+}
+
+int sem_post(sem_t *sem) {
+    lock();
+    Semaphore *curr = (Semaphore *)sem->__align;
+
+    // increment value of semaphore
+    curr->value++;
+
+    // unblock start of queue and consume it if semaphore is greater than 0
+    if (curr->head && curr->value > 0) {
+        Queue *unblock = curr->head;
+        curr->head = curr->head->next;
+        if (curr->head == NULL) {
+            curr->tail = NULL;
+        }
+        unblock->thread->status = READY;
+    }
+
+    unlock();
+    return 0;
+
+}
+
+int sem_destroy(sem_t *sem) {
+    lock();
+    Semaphore *curr = (Semaphore *)sem->__align;
+
+    // do not destroy if not initialized by sem_init
+    if (curr->initialized != 1) {
+        unlock();
+        return -1;
+    }
+    curr->initialized = 0;
+
+    // free all items in queue
+    Queue *current = curr->head;
+    while(current != NULL) {
+        Queue *temp = current;
+        current = current->next;
+        free(temp);
+    }
+
+    free(curr);
+    unlock();
+    return 0;
 }
 
 unsigned long int ptr_demangle(unsigned long int p)
