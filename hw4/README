@@ -1,0 +1,249 @@
+# Thread local storage
+
+Threads share address space by default but no protections from misbehaving Threads
+
+TLS (Thread local storage)
+- Storage
+  - Area of memory where data can be written/read from
+- local - private to 1 thread
+- Copy on write semantics
+  - Only copy when writing to shared memory
+
+Not required to implement issues with stack accesses, only heap (local storage)
+
+Protect data tampering and stealing
+
+**Terminate thread if violates protection**
+
+How to detect protection violations
+- Protect against read and writes
+- If R (W) bit is cleared reading (writing) from (to) the corresponding memory area wll trigger seg fault
+- Catch segfault signal with signal handler
+
+Enabling protection
+- All TLS Sections hve R/W bits cleared unless actively in use (only tls_read and tls_write)
+- Need memory for TLS sections. 
+  - Allocate with mmap()
+  - Page aligned is nice since bits used for permissions apply to whole pages. mmap allocates memory with page granularity and aligned to page boundaries
+  - all tls areas are rounded up to next page size
+
+Types of segfaults
+1) Thread Ti(i!=1) accesses T1's TLS
+   1) Kill Ti (pthread_Exit())
+2) Regular segfault, Ti tries to access memory thats not a TLS but access is inconsistent with page permission settings
+   1) Raise segfault to the process(kill process)
+
+Which thread caused SEGV
+SIGSEGV
+pthread_self
+What address?
+sigaction -> siginfo_t -> find si_addr which is memory location that caused fault
+
+
+tls_create()
+- creates local storage area for current thread
+- 0 success, -1 on error (if curr threaad already has LSA or size <=0)
+
+tls_write()
+- reads length bytes from memory location pointed to by buffer and writes into local storage area
+- Returns 0 on success
+- -1 on error
+  - if thread no LSA or offset+length > size of LSA
+-
+
+tls_read()
+- reads length bytes
+- same as write but opposite outcome
+
+
+tls_clone()
+- Clones LSA of target thread tid
+- copy on write 
+  - Storage areas of both threads initially refer to same memory pages
+  - Only when one thread writes to shared region then TLS library creates private copy of region that is written
+  - Other areas must remain shared
+- 0 on success
+- -1 if target thread no LSA or curr thread already has LSA
+
+Assumptions:
+- Temp;orarily unprotect this threads local storage area when call tls_read or write
+- Work with page granularity (instead of byte)
+  - If T2 Clones T1's TLS, and T2 writes one byte to its own TLS
+  - Instead of copying one byte, make copy of the entire page that contains the target byte (only duplicate that single page)
+
+Possible for more than two threads to share same LSA
+- copy on write only applies to thread doing the writing, others still share
+
+mmap(2)
+mprotect(2)
+
+typedef struct thread_local_storage {
+    pthread_t tid; 
+    unisnged int size; // size in bytes
+    unsigned int page_num; // # pages 
+    struct page **pages; // arra of pointers to pages
+} TLS;
+
+struct page {
+    unisnged int address; // start address of page
+    int ref_count; // counter for shared pages
+}
+
+mapping thread to TLS
+
+struct hash_element {
+    pthread_t tid;
+    TLS *tls;
+    struct hash_element *next;
+};
+// fixed size array
+struct hash_element* hash_table[HASH_SIZE];
+
+initialize on first run
+void tls_init() {
+    // sigaction
+    page_size = getpagesize();
+
+    sigemptyset(&sigact.sa_mask);
+    sigact.sa_flags = SA_SIGINFO;
+    sigact.sa_sigaction = tls_handle_page_fault;
+
+    sigaction(SIGBUS, &sigact, NULL)
+    sigaction(SIGSEGv, &sigact, NULL)
+
+    initialized = 1
+}
+
+handle sigsegv
+void handler(int sig, siginfo_t *si, void *context) {
+
+    // address to start of page
+    p_fault = ((unsigned int) si->si_addr) & ~(page_size - 1);
+
+
+
+    // check whether is real segfault for forbidden memory
+    // brute force scan through all allocated TLS regions
+    // for each page
+    if (page->address == p_fault) {
+        pthread_exit(NULL);
+    }
+
+    // normal fault
+    signal(SEGSEGV, SIG_DFL);
+    signal(SIGBUS, SIG_DFL);
+    raise(sig)
+}
+
+tls_create {
+    if (!initialized) tls_init()
+    erorr handling
+
+    allocate tls using calloc (tls struct only)
+
+    initialize TLS
+        add tls->threadid
+        tls->size and
+        tls->page_num
+
+    allocate pages tls->pages with (array of pointers with calloc)
+    mmap for pages specifically
+
+    for each page i;
+        struct page *p;
+        p->address = (unsigned int)mmap(0, PAGESIZE, 0, MAP_ANON | MAP_PRIVATE, 0, 0);
+
+        p->ref_count = 1;
+        tls->pages[i] = p;
+
+    add this threadid and tls mapping to global data structure
+}
+
+tls_destroy {
+    error handling
+    clean up all pages
+    check each page whether its shared
+        if not shared, free the page
+        if shared ,cant free as other threads still rely on it
+    clean up tls
+    remove mapping from global data structure
+}
+
+tls_protect(struct page *p) {
+    if (mprotect((void*) p->adddress, page_size, 0)) {
+        fprintf(, )
+        exit(1) error
+    }
+}
+tls_unprotect()
+    ...
+    mprotect(... PROT_READ | PROT_WRITE)
+    ...
+
+
+
+tls_read(unsigned int offset, unsigned int length, char *buffer) {
+    error handling
+    unprotect all pages
+    perform read
+    reprotect
+
+    not trivial since using memcpy, need to copy page by page, not all bytes by length
+
+    for (cnt = 0, idx = offset; idx < (offset + length); ++cnt, ++idx) {
+        struct page *p;
+        unsigned int pn, poff;
+
+        pn = idx / page_size;
+        poff = idx % page_size;
+
+        p = tls->pages[pn];
+        src= ((char*) p->address) + poff;
+
+        buffer[cnt] = *src;
+    }
+}
+
+tls_write {
+    error handling
+    unprotect all pages
+    perform write operation
+    reprotect
+
+    for (cnt = 0, idx = offset; idx < (offset + length); ++cnt, ++idx) {
+        struct page *p, *copy;
+        unsigned int pn, poff;
+
+        pn = idx / page_size;
+        poff = idx % page_size;
+
+        p = tls->pages[pn];
+
+        // said to be flawed for 1 small issue 
+        if (p->ref_count > 1) {
+            // shared page, create private copy
+            copy = (struct page*) calloc(1, sizeof(struct page));
+            copy->address = (unsigned int) mmap(0, page_size, PROT_WRITE, MAP_ANON | MAP_PRIVATE, 0, 0);
+            copy->ref_count = 1;
+            tls->pages[pn] = copy;
+
+            p->ref_count--;
+            tls_protect(p);
+            p = copy;
+        }
+
+        src= ((char*) p->address) + poff;
+
+        buffer[cnt] = *src;
+    }
+
+
+}
+
+tls_clone {
+    error
+    do cloning and allocate tls
+    copy pages (not contents
+        adjust reference counts
+        make
+}
