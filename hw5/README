@@ -1,0 +1,8 @@
+# Specifications
+
+No more than 64 files
+Virtual dish has 8192 blocks each 4KB
+- Only 4096 reserved for data, others are for metadata
+- Free blocks when file is deleted
+Max file size is 16 megabytes (all 4096 data blocks each with 4KB)
+
