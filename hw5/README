@@ -6,3 +6,39 @@ Virtual dish has 8192 blocks each 4KB
 - Free blocks when file is deleted
 Max file size is 16 megabytes (all 4096 data blocks each with 4KB)
 
+# hints
+In principle, you can implement the file system in any way that you want (as long as 4,096
+blocks of the disk remain available to store file data). However, it might be easiest when you
+borrow ideas from existing file system designs. We recommend to model your file system after
+the FAT (file allocation table) design, although it is also possible (though likely more complex)
+to use a Unix (inode)-based design.
+In general, you will likely need a number of data structures on disk, including a super block, a
+root directory, information about free and empty blocks on disk, file meta-information (such as
+file size), and a mapping from files to data blocks.
+The super block is typically the first block of the disk, and it stores information about the
+location of the other data structures. For example, you can store in the super block the
+whereabouts of the file allocation table, the directory, and the start of the data blocks.
+The directory holds the names of the files. When using a FAT-based design, the directory also
+stores, for each file, its file size and the head of the list of corresponding data blocks. When
+you use inodes, the directory only stores the mapping from file names to inodes.
+The file allocation table (FAT) is convenient because it can be used to keep track of empty
+blocks and the mapping between files and their data blocks. When you use an inode-based
+design, you will need a bitmap to mark disk blocks as used and an inode array to hold file
+information (including the file size and pointers to data blocks).
+In addition to the file-system-related data structures on disk, you also need support for file
+descriptors. A file descriptor is an integer in the range between 0 and 31 (inclusive) that is
+returned when a file is opened, and it is used for subsequent file operations (such as reading
+and writing). A file descriptor is associated with a file, and it also contains a file offset (seek
+pointer). This offset indicates the point in the file where read and write operations start. It is
+implicitly updated (incremented) whenever you perform a fs_read or fs_write operation,
+and it can be explicitly moved within the file by calling fs_lseek. Note that file descriptors are
+not stored on disk. They are only meaningful while an application is running and the file system
+is mounted. Once the file system is unmounted, file descriptors are no longer meaningful (and,
+hence, should be all closed before a call to umount_fs).
+
+
+# Helpful tips
+directory
+- name
+- start
+- length

@@ -1,18 +1,54 @@
+#ifndef FS_H
+#define FS_H
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
+#include "disk.h"
 
 #include <sys/types.h>
 
+#define DISK_BLOCKS 8192
+#define DATA_DISK_BLOCKS 4096
+#define BLOCK_SIZE 4096
+#define MAX_FILE_SIZE 16777216
+#define MAX_FILES 64
+#define MAX_NAME_LENGTH 15
+#define BLOCK_FILE_END 0
+#define MAX_FILE_DESCRIPTORS 32
+
 typedef struct SuperBlock {
-    
+    unsigned int totalBlocks;
+    unsigned int fatStart;
+    unsigned int fatBlocks;
+    unsigned int rootBlocks;
+    unsigned int rootStart;
+    unsigned int dataStart;
 } SuperBlock;
 
+// file allocation table
+typedef struct FAT {
+    unsigned int table[DISK_BLOCKS];
+} FAT;
+
+typedef struct DirectoryEntry {
+    char fileName[MAX_NAME_LENGTH + 1];
+    unsigned int fileStart;
+    unsigned int fileSize;
+} DirectoryEntry;
+
 typedef struct Directory {
-    char fileNames**;
-    
+    DirectoryEntry entries[MAX_FILES];
 } Directory;
+
+
+typedef struct FileDescriptor {
+    int open;
+    unsigned int fileOffset;
+    // unsigned int fileEnd;
+    DirectoryEntry *directoryEntry;
+} FileDescriptor;
 
 /*
 This function creates a fresh (and empty) file system on the virtual disk with name disk_name.
@@ -53,7 +89,7 @@ In addition to the management routines listed above, you are supposed to impleme
 following file system functions (which are very similar to the corresponding Linux file system
 operations). These file system functions require that a file system was previously mounted
  */
-int unmount_fs(char *disk_name);
+int umount_fs(char *disk_name);
 
 /*
 The file specified by name is opened for reading and writing, and the file descriptor
@@ -159,3 +195,5 @@ failure when the file descriptor fildes is invalid or the requested length is la
 size.
 */
 int fs_truncate(int fildes, off_t length);
+
+#endif
