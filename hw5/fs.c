@@ -6,6 +6,27 @@ static Directory *rootDirectory;
 static FileDescriptor fileDescriptors[MAX_FILE_DESCRIPTORS];
 static int MOUNTED = 0;
 
+void initFileDiscritors() {
+    int i;
+    for (i = 0; i < MAX_FILE_DESCRIPTORS; i++) {
+        fileDescriptors[i].open = 0;
+        fileDescriptors[i].fileOffset = 0;
+        fileDescriptors[i].directoryEntry = NULL;
+    }
+}
+
+
+unsigned int allocateBlock() {
+    int i;
+    for (i = 0; i < DISK_BLOCKS; i++) {
+        if (fat->table[i] == BLOCK_FILE_END) { 
+            fat->table[i] = 0;
+            return i;
+        }
+    }
+    return -1; 
+}
+
 
 int make_fs(char *disk_name) {
     // attempt to make and open disk
@@ -31,6 +52,11 @@ int make_fs(char *disk_name) {
 
     // Initialize FAT
     memset(fat->table, 0, sizeof(fat->table));
+    // set all blocks to BLOCK_FILE_END
+    int i;
+    for (i = 0; i < DISK_BLOCKS; i++) {
+        fat->table[i] = BLOCK_FILE_END;
+    } 
 
     // Initialize root directory
     memset(rootDirectory->entries, 0, sizeof(rootDirectory->entries));
@@ -39,7 +65,7 @@ int make_fs(char *disk_name) {
     if (block_write(0, (char *)superblock) == -1) {
         return -1;
     }
-    int i;
+
     // Write FAT to disk
     for (i = 0; i < superblock->fatBlocks; i++) {
         if (block_write(superblock->fatStart + i, ((char *)fat) + i * BLOCK_SIZE)  == -1) {
@@ -118,6 +144,7 @@ int mount_fs(char *disk_name) {
         }
     }
 
+    initFileDiscritors();
 
     MOUNTED = 1;
 
@@ -169,7 +196,7 @@ int fs_open(char *name) {
         // see if file exists in root directory
         if (strcmp(rootDirectory->entries[i].fileName, name) == 0) {
             // check if file exists, then add to file descriptors
-            for (j = 0; j < MAX_FILES; j++) {
+            for (j = 0; j < MAX_FILE_DESCRIPTORS; j++) {
                 if (!fileDescriptors[j].open) {
                     fileDescriptors[j].open = 1;
                     fileDescriptors[j].fileOffset = 0;
@@ -177,6 +204,8 @@ int fs_open(char *name) {
                     return j;
                 }
             }
+            // no available file descriptors
+            return -1; 
         }
     }
     return -1;
@@ -186,7 +215,7 @@ int fs_close(int fildes) {
     if (!MOUNTED) {
         return -1;
     }
-    if (fildes < 0 || fildes >= MAX_FILES) {
+    if (fildes < 0 || fildes >= MAX_FILE_DESCRIPTORS) {
         return -1;
     }
 
@@ -194,8 +223,10 @@ int fs_close(int fildes) {
         return -1;
     }
 
-    // find file descriptor entry and close it
+    // find file descriptor entry and close it  
     fileDescriptors[fildes].open = 0;
+    fileDescriptors[fildes].fileOffset = 0;
+    fileDescriptors[fildes].directoryEntry = NULL;
     return 0;
 }
 
@@ -219,7 +250,7 @@ int fs_create(char *name) {
     for (i = 0; i < MAX_FILES; i++) {
         if (strcmp(rootDirectory->entries[i].fileName, "") == 0) {
             strcpy(rootDirectory->entries[i].fileName, name);
-            rootDirectory->entries[i].fileStart = 0;
+            rootDirectory->entries[i].fileStart = BLOCK_FILE_END;
             rootDirectory->entries[i].fileSize = 0;
             return 0;
         }
@@ -243,8 +274,11 @@ int fs_delete(char *name) {
     for (i = 0; i < MAX_FILES; i++) {
         if (strcmp(rootDirectory->entries[i].fileName, name) == 0) {
             // if found, check if open 
-            if (fileDescriptors[i].open) {
-                return -1;
+            int j;
+            for (j = 0; j < MAX_FILE_DESCRIPTORS; j++) {
+                if (fileDescriptors[j].open && fileDescriptors[j].directoryEntry == &(rootDirectory->entries[i])) {
+                    return -1;
+                }
             }
 
             // remove file from FAT 
@@ -296,6 +330,9 @@ int fs_read(int filedes, void *buf, size_t nbyte) {
         // go to correct block
         int i = 0;
         for (i = 0; i < blockOffset; i++) {
+            if (block == BLOCK_FILE_END) {
+                return bytesRead;
+            }
             block = fat->table[block];
         }
 
@@ -329,81 +366,225 @@ int fs_read(int filedes, void *buf, size_t nbyte) {
     return bytesRead;
 }
 
+// int fs_write(int fildes, void *buf, size_t nbyte) {
+//     if (!MOUNTED) {
+//         return -1;
+//     }
+//     if (fildes < 0 || fildes >= MAX_FILES) {
+//         return -1;
+//     }   
+
+//     // get file descriptor and directory entry
+//     FileDescriptor *fd = &fileDescriptors[fildes];
+//     if (!fd->open) {
+//         return -1;
+//     }
+//     DirectoryEntry *entry = fd->directoryEntry;
+
+//     // get file start and offset
+//     unsigned int fileStart = entry->fileStart;
+//     unsigned int offset = fd->fileOffset;
+    
+//     unsigned int bytesWritten = 0;
+//     // printf("bytes written: %d\n", bytesWritten);
+//     // get block, offset and position
+
+//      while (bytesWritten < nbyte) {
+//         // Calculate block, offset within block, and position within block
+//         unsigned int blockOffset = offset / BLOCK_SIZE;
+//         unsigned int blockPosition = offset % BLOCK_SIZE;
+
+//         printf("block offset: %d\n", blockOffset);
+       
+
+//         // Traverse to the correct block
+//         unsigned int block = fileStart;
+//         printf("block %d\n", block);   
+         
+//         unsigned int prevBlock = BLOCK_FILE_END;
+//         int i;
+//         for (i = 0; i < blockOffset; i++) {
+//             if (block == BLOCK_FILE_END) {
+//                 // Allocate a new block if we reach the end of the file
+//                 unsigned int newBlock = allocateBlock();
+//                 if (newBlock == BLOCK_FILE_END) {
+//                     // No more blocks available
+//                     return bytesWritten;
+//                 }
+//                 if (prevBlock != BLOCK_FILE_END) {
+//                     fat->table[prevBlock] = newBlock;
+//                 } else {
+//                     entry->fileStart = newBlock;
+//                 }
+//                 block = newBlock;
+//             } else {
+//                 prevBlock = block;
+//                 block = fat->table[block];
+//             }
+//         }
+       
+
+//         // Allocate the first block if the file is empty
+//         if (fileStart == BLOCK_FILE_END) {
+//             unsigned int newBlock = allocateBlock();
+//             if (newBlock == BLOCK_FILE_END) {
+//                 // No more blocks available
+//                 return bytesWritten;
+//             }
+//             entry->fileStart = newBlock;
+//             fileStart = newBlock;
+//             block = newBlock;
+//         }
+
+//          printf("block %d\n", block);   
+
+        
+
+//         // get current block data to write to end of existing data
+//         char blockBuf[BLOCK_SIZE];
+//         if (block_read(superblock->dataStart + block, blockBuf) == -1) {
+//             return -1;
+//         }
+
+//         // get bytes left to write 
+//         unsigned int bytesLeft = BLOCK_SIZE - blockPosition;
+//         // update bytes left to be only up to data wanted
+//         if (bytesLeft > nbyte - bytesWritten) {
+//             bytesLeft = nbyte - bytesWritten;
+//         }
+        
+//         memcpy(blockBuf + blockPosition, buf + bytesWritten, bytesLeft);
+//         if (block_write(superblock->dataStart + block, blockBuf) == -1) {
+//             return -1;
+//         }
+//         bytesWritten += bytesLeft;
+//         offset += bytesLeft;
+
+//         printf("continue %d\n", bytesWritten < nbyte);
+
+
+//     }
+
+
+//     // set file offset and file size
+//     fd->fileOffset += bytesWritten;
+//     if (fd->fileOffset > entry->fileSize) {
+//         entry->fileSize = fd->fileOffset;
+//     }
+
+//     // printf("bytes written: %d\n", bytesWritten);
+//     return bytesWritten;
+// }
+
 int fs_write(int fildes, void *buf, size_t nbyte) {
-    if (!MOUNTED) {
+    // error check
+    if (!MOUNTED || fildes < 0 || fildes >= MAX_FILE_DESCRIPTORS) {
         return -1;
     }
-    if (fildes < 0 || fildes >= MAX_FILES) {
-        return -1;
-    }   
-
-    // get file descriptor and directory entry
     FileDescriptor *fd = &fileDescriptors[fildes];
     if (!fd->open) {
         return -1;
     }
+    if (nbyte == 0) {
+        return 0;
+    }
+    if (fd->fileOffset + nbyte > MAX_FILE_SIZE) {
+        nbyte = MAX_FILE_SIZE - fd->fileOffset;
+    }
+
     DirectoryEntry *entry = fd->directoryEntry;
-
-    // get file start and offset
-    unsigned int fileStart = entry->fileStart;
-    unsigned int offset = fd->fileOffset;
-    
+    unsigned int currentOffset = fd->fileOffset;
     unsigned int bytesWritten = 0;
+    unsigned int currentBlock = entry->fileStart;
+    unsigned int prevBlock = BLOCK_FILE_END;
 
-    while (bytesWritten < nbyte) {
-        // get block, offset and position
-        unsigned int block = fileStart;
-        unsigned int blockOffset = offset / BLOCK_SIZE;
-        unsigned int blockPosition = offset % BLOCK_SIZE;
+    // allocate first block if file is empty
+    if (currentBlock == BLOCK_FILE_END) {
+        currentBlock = allocateBlock();
+        if (currentBlock == -1) {
+            return bytesWritten;
+        }
+        entry->fileStart = currentBlock;
+        fat->table[currentBlock] = BLOCK_FILE_END;
+    }
 
-        // traverse to offset
-        int i = 0;
-        for (i = 0; i < blockOffset; i++) {
-            if (block == BLOCK_FILE_END) {
-                // if we reach the end of the file or empty block, allocate a new block
-                int j;
-                for (j = 0; j < DISK_BLOCKS; j++) {
-                    if (fat->table[j] == 0) {
-                        fat->table[block] = j;
-                        block = j;
-                        break;
-                    }
-                }
-                // if nothing found, return early
-                if (block == BLOCK_FILE_END) {
-                    return bytesWritten;
-                }
+    // move to correct block
+    unsigned int blockIndex = currentOffset / BLOCK_SIZE;
+    unsigned int blockPosition = currentOffset % BLOCK_SIZE;
+
+    // traverse to correct starting block
+    int i;
+    for (i = 0; i < blockIndex; i++) {
+        // if we reach the end of the file, allocate a new block
+        if (currentBlock == BLOCK_FILE_END) {
+            unsigned int newBlock = allocateBlock();
+            if (newBlock == -1) {
+                return bytesWritten;
             }
-            block = fat->table[block];
-        }
 
-        // get current block data to write to end of existing data
-        char blockBuf[BLOCK_SIZE];
-        if (block_read(superblock->dataStart + block, blockBuf) == -1) {
-            return -1;
-        }
-
-        // get bytes left to write
-        unsigned int bytesLeft = BLOCK_SIZE - blockPosition;
-        // update bytes left to be only up to data wanted
-        if (bytesLeft > nbyte - bytesWritten) {
-            bytesLeft = nbyte - bytesWritten;
+            // link previous block to new block
+            if (prevBlock != BLOCK_FILE_END) {
+                fat->table[prevBlock] = newBlock;
+            }
+            
+            currentBlock = newBlock;
+            fat->table[currentBlock] = BLOCK_FILE_END;
+        } else {
+            prevBlock = currentBlock;
+            currentBlock = fat->table[currentBlock];
         }
         
-        memcpy(blockBuf + blockPosition, buf + bytesWritten, bytesLeft);
-        if (block_write(superblock->dataStart + block, blockBuf) == -1) {
-            return -1;
-        }
-        bytesWritten += bytesLeft;
-        offset += bytesLeft;
 
     }
 
-    // set file offset and file size
+    //  write data
+    while (bytesWritten < nbyte) {
+        // read current block to get existing data
+        char blockBuffer[BLOCK_SIZE];
+        if (block_read(superblock->dataStart + currentBlock, blockBuffer) == -1) {
+            return -1;
+        }
+
+        // find number of bytes to write in this iteration
+        unsigned int bytesLeftInBlock = BLOCK_SIZE - blockPosition;
+        unsigned int bytesToWrite = (bytesLeftInBlock > (nbyte - bytesWritten)) ? (nbyte - bytesWritten) : bytesLeftInBlock;
+
+        // copy data
+        memcpy(blockBuffer + blockPosition, buf + bytesWritten, bytesToWrite);
+
+        // write data to disk
+        if (block_write(superblock->dataStart + currentBlock, blockBuffer) == -1) {
+            return -1;
+        }
+
+        // move cursors
+        bytesWritten += bytesToWrite;
+        currentOffset += bytesToWrite;
+        blockPosition = 0; 
+
+        // if more data to write, get next block
+        if (bytesWritten < nbyte) {
+            // check if we need to allocate a new block
+            unsigned int nextBlock = fat->table[currentBlock];
+            if (nextBlock == BLOCK_FILE_END) {
+                nextBlock = allocateBlock();
+                if (nextBlock == -1) {
+                    break;
+                }
+                // link current block to next block
+                fat->table[currentBlock] = nextBlock;
+                fat->table[nextBlock] = BLOCK_FILE_END;
+            }
+            currentBlock = nextBlock;
+        }
+    }
+
+    // update file descriptor and file metadata
     fd->fileOffset += bytesWritten;
     if (fd->fileOffset > entry->fileSize) {
         entry->fileSize = fd->fileOffset;
     }
+
     return bytesWritten;
 }
 
@@ -513,7 +694,7 @@ int fs_truncate(int fildes, off_t length) {
     // free blocks after length
     while (block != BLOCK_FILE_END) {
         unsigned int nextBlock = fat->table[block];
-        fat->table[block] = 0;
+        fat->table[block] = BLOCK_FILE_END;
         block = nextBlock;
     }
 

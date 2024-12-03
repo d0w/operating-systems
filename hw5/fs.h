@@ -15,7 +15,7 @@
 #define MAX_FILE_SIZE 16777216
 #define MAX_FILES 64
 #define MAX_NAME_LENGTH 15
-#define BLOCK_FILE_END 0
+#define BLOCK_FILE_END 9999
 #define MAX_FILE_DESCRIPTORS 32
 
 typedef struct SuperBlock {
