@@ -1,5 +1,52 @@
 # Thread local storage
+Derek Xu
+U18821640
 
+# Explanation
+There are global variables for initialization, page size, and the hash table that connects tids to their TLS.
+
+tls_create() starts by initializing the TLS system. 
+tls_init() creates the signal handler and gets the system's page size. It then sets the signal handler so that no signals are blocked.tls_create
+Then, the page fault handler is attached as the signal handler. 
+tlsPageFaultHandler() uses sigaction's extended siginfo_t struct to get the address of where the fault occurred. The handler then gets that address and removes the offset bits via a bitwise NAND with the page fault size. 
+Then, the handler looks through every page in the TLS system to see if a page address matches. If so, we terminate the thread. If not, then we raise SIGSEGV and SIGBUS for the OS to handle.
+After initialization, tls_create() then finds an entry in the hash table (an array) that is empty. If the tid already exists in the hash table, exit. Then it checks the size as well. 
+A TLS is then created and initialized with the thread id, size, and page count. Then for each page pointer, use mmap to create a page aligned memory region and set the ref count to 1.
+Then, create a hash element with the newly created TLS and tid and add it it to the hash array.
+
+tls_write() finds the thread's pid and checks if its LSA exists in the hash table. If not, then exit. 
+Then get the TLS and check the size+offset. Then unprotect all the pages to allow for writing.
+For each byte in the buffer, find the page number and offset, then get the page.
+- If the page is shared, create a private copy, update the ref count of the original, and reroute the page pointer to the new page.
+- Then, get the source address and copy the byte to the buffer.
+Finally, reprotect the pages.
+
+tls_read() works by checking if LSA exists in the hash table and if the read size is valid. If not, exit. 
+Then unprotect all the pages to allow for reading.
+For each byte in the buffer, find the page number and offset, then get the page.
+Then, get the source address and copy the byte to the buffer using the offset.
+Finally, reprotect the pages.
+
+tls_clone() checks if the thread has an LSA already and if the target thread has an LSA. If not, then exit.
+Then, it gets the target thread's hash and TLS.
+A new TLS is created and initialized with the target thread's id, size, and page count.
+Then, for each page in the target thread's TLS, point the current TLS page to the target thread's page. and update the ref count (add 1).
+Finally, add the new TLS to the hash table.
+
+tls_protect() and tls_unprotect() are helper functions to protect and unprotect the pages respectively.
+They use the mprotect call to set the page permissions either to protect read and write or none.
+
+
+My main problems were associated with the clone function. Initially, I didnt properly update the correct pages and their references. Furthermore, I didn't add the entry into the hash table. 
+Copy on write in the write function also gave me issues. The main issue was that I copy on write was not working for a single thread (it lost data). This was due to the hash not having the proper references to the TLS.
+
+
+
+
+
+
+
+# Notes taken from lecture
 Threads share address space by default but no protections from misbehaving Threads
 
 TLS (Thread local storage)

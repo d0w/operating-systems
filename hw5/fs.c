@@ -19,8 +19,9 @@ void initFileDiscritors() {
 unsigned int allocateBlock() {
     int i;
     for (i = 0; i < DISK_BLOCKS; i++) {
-        if (fat->table[i] == BLOCK_FILE_END) { 
+        if (fat->table[i] == BLOCK_INVALID) { 
             fat->table[i] = 0;
+           
             return i;
         }
     }
@@ -50,30 +51,30 @@ int make_fs(char *disk_name) {
     superblock->rootBlocks = (sizeof(Directory) + BLOCK_SIZE - 1) / BLOCK_SIZE; 
     superblock->dataStart = superblock->rootStart + superblock->rootBlocks + 3;
 
-    // Initialize FAT
+    // initialize FAT
     memset(fat->table, 0, sizeof(fat->table));
-    // set all blocks to BLOCK_FILE_END
+    // set all blocks to invalid
     int i;
     for (i = 0; i < DISK_BLOCKS; i++) {
-        fat->table[i] = BLOCK_FILE_END;
+        fat->table[i] = BLOCK_INVALID;
     } 
 
-    // Initialize root directory
+    // initialize root directory
     memset(rootDirectory->entries, 0, sizeof(rootDirectory->entries));
 
-    // Write superblock to disk
+    // write superblock to disk
     if (block_write(0, (char *)superblock) == -1) {
         return -1;
     }
 
-    // Write FAT to disk
+    // write FAT to disk
     for (i = 0; i < superblock->fatBlocks; i++) {
         if (block_write(superblock->fatStart + i, ((char *)fat) + i * BLOCK_SIZE)  == -1) {
             return -1;
         }
     }
 
-    // Write root directory to disk
+    // write root directory to disk
     for (i = 0; i < superblock->rootBlocks; i++) {
         if (block_write(superblock->rootStart + i, ((char *)rootDirectory) + i * BLOCK_SIZE) == -1) {
             return -1;
@@ -85,31 +86,6 @@ int make_fs(char *disk_name) {
     // // printf("datastart: %d\n", superblock->dataStart);
     // // printf("fatstart: %d\n", superblock->fatStart);
     // // printf("fatblocks: %d\n", superblock->fatBlocks);
-
-    // // initialize file allocation table 
-    // memset(fat->table, 0, sizeof(fat->table));
-    // // init root dir
-    // memset(rootDirectory->entries, 0, sizeof(rootDirectory->entries));
-
-    // // write initialized data to disk
-    // if (block_write(0, ) == -1) {
-    //     return -1;
-    // }
-    // // char buff[BLOCK_SIZE];
-    // // block_read(0, buff);
-    // // printf("superblock: %d\n", ((SuperBlock *)buff)->totalBlocks);
-
-    // int i;
-    // for (i = 0; i < superblock->fatBlocks; i++) {
-    //     if (block_write(superblock->fatStart + i, ((char *)&fat) + i * BLOCK_SIZE) == -1) {
-    //         return -1;
-    //     }
-    // }
-    // for (i = 0; i < superblock->rootBlocks; i++) {
-    //     if (block_write(superblock->rootStart + i, ((char *)&rootDirectory) + i * BLOCK_SIZE) == -1) {
-    //         return -1;
-    //     }
-    // }
 
     // close
     if (close_disk() == -1) {
@@ -250,7 +226,8 @@ int fs_create(char *name) {
     for (i = 0; i < MAX_FILES; i++) {
         if (strcmp(rootDirectory->entries[i].fileName, "") == 0) {
             strcpy(rootDirectory->entries[i].fileName, name);
-            rootDirectory->entries[i].fileStart = BLOCK_FILE_END;
+            // rootDirectory->entries[i].fileStart = BLOCK_FILE_END;
+            rootDirectory->entries[i].fileStart = BLOCK_INVALID;
             rootDirectory->entries[i].fileSize = 0;
             return 0;
         }
@@ -283,12 +260,19 @@ int fs_delete(char *name) {
 
             // remove file from FAT 
             unsigned int block = rootDirectory->entries[i].fileStart;
-            while (block != BLOCK_FILE_END) {
+            int counter = 0;
+            while (block != BLOCK_FILE_END && counter < DISK_BLOCKS){
+
                 // traverse linnked list and remove block from FAT each time
                 unsigned int nextBlock = fat->table[block];
-                fat->table[block] = 0;
+                // printf("block: %d\n", block);
+                fat->table[block] = BLOCK_INVALID;
+                // printf("block: %d\n", fat->table[block]);
                 block = nextBlock;
+                // printf("block: %d\n", block);   
+                counter++;
             }
+            fat->table[block] = BLOCK_INVALID;
 
             // remove directory entry info from root directory
             memset(&(rootDirectory->entries[i]), 0, sizeof(DirectoryEntry));
@@ -315,17 +299,25 @@ int fs_read(int filedes, void *buf, size_t nbyte) {
     FileDescriptor *fd = &fileDescriptors[filedes];
     fd->open = 1;
 
+
     // get root directory entry and file start
     DirectoryEntry *entry = fd->directoryEntry;
     unsigned int offset = fd->fileOffset;
     unsigned int fileStart = entry->fileStart;
 
+    // check if offset is greater than file size
+    if (offset + nbyte > entry->fileSize) {
+        nbyte = entry->fileSize - offset;
+    }
+
     unsigned int bytesRead = 0;
     while (bytesRead < nbyte) {
         // get first block, block offset (from start of first block), and position within block
-        unsigned int block = fileStart;
         unsigned int blockOffset = offset / BLOCK_SIZE;
         unsigned int blockPosition = offset % BLOCK_SIZE;
+        unsigned int block = fileStart;
+
+        // printf("blockOffset: %d\n", blockOffset);
 
         // go to correct block
         int i = 0;
@@ -334,7 +326,10 @@ int fs_read(int filedes, void *buf, size_t nbyte) {
                 return bytesRead;
             }
             block = fat->table[block];
+            // printf("block: %d\n", block);
         }
+
+        // printf("block: %d\n", block);
 
         // read from block
         char blockBuf[BLOCK_SIZE];
@@ -342,139 +337,28 @@ int fs_read(int filedes, void *buf, size_t nbyte) {
             return -1;
         }
 
-        // figure out how many bytes we have left to read
+        // figure out how many bytes we have left to read in block
         unsigned int bytesLeft = BLOCK_SIZE - blockPosition;
         // if we have more bytes to read than bytes left in block, only read up to bytes left
-        if (bytesLeft > nbyte - bytesRead) {
-            bytesLeft = nbyte - bytesRead;
-        }
+        unsigned int bytesToRead = (bytesLeft < nbyte - bytesRead) ? bytesLeft : nbyte - bytesRead;
+   
         // if approaching end of file, only read until end of file
-        if (bytesLeft > entry->fileSize - offset) {
-            bytesLeft = entry->fileSize - offset;
-        }
+        // if (bytesLeft > entry->fileSize - offset) {
+        //     bytesLeft = entry->fileSize - offset;
+        // }
 
         // copy data to buffer
         // 00..bytesRead write blockdata...blockPosition however many left bytes
-        memcpy(buf + bytesRead, blockBuf + blockPosition, bytesLeft);
+        memcpy(buf + bytesRead, blockBuf + blockPosition, bytesToRead);
         
         // continue iteration
-        bytesRead += bytesLeft;
-        offset += bytesLeft;
+        bytesRead += bytesToRead;
+        offset += bytesToRead;
     }
     // move file offset in file descriptor
     fd->fileOffset += bytesRead;
     return bytesRead;
 }
-
-// int fs_write(int fildes, void *buf, size_t nbyte) {
-//     if (!MOUNTED) {
-//         return -1;
-//     }
-//     if (fildes < 0 || fildes >= MAX_FILES) {
-//         return -1;
-//     }   
-
-//     // get file descriptor and directory entry
-//     FileDescriptor *fd = &fileDescriptors[fildes];
-//     if (!fd->open) {
-//         return -1;
-//     }
-//     DirectoryEntry *entry = fd->directoryEntry;
-
-//     // get file start and offset
-//     unsigned int fileStart = entry->fileStart;
-//     unsigned int offset = fd->fileOffset;
-    
-//     unsigned int bytesWritten = 0;
-//     // printf("bytes written: %d\n", bytesWritten);
-//     // get block, offset and position
-
-//      while (bytesWritten < nbyte) {
-//         // Calculate block, offset within block, and position within block
-//         unsigned int blockOffset = offset / BLOCK_SIZE;
-//         unsigned int blockPosition = offset % BLOCK_SIZE;
-
-//         printf("block offset: %d\n", blockOffset);
-       
-
-//         // Traverse to the correct block
-//         unsigned int block = fileStart;
-//         printf("block %d\n", block);   
-         
-//         unsigned int prevBlock = BLOCK_FILE_END;
-//         int i;
-//         for (i = 0; i < blockOffset; i++) {
-//             if (block == BLOCK_FILE_END) {
-//                 // Allocate a new block if we reach the end of the file
-//                 unsigned int newBlock = allocateBlock();
-//                 if (newBlock == BLOCK_FILE_END) {
-//                     // No more blocks available
-//                     return bytesWritten;
-//                 }
-//                 if (prevBlock != BLOCK_FILE_END) {
-//                     fat->table[prevBlock] = newBlock;
-//                 } else {
-//                     entry->fileStart = newBlock;
-//                 }
-//                 block = newBlock;
-//             } else {
-//                 prevBlock = block;
-//                 block = fat->table[block];
-//             }
-//         }
-       
-
-//         // Allocate the first block if the file is empty
-//         if (fileStart == BLOCK_FILE_END) {
-//             unsigned int newBlock = allocateBlock();
-//             if (newBlock == BLOCK_FILE_END) {
-//                 // No more blocks available
-//                 return bytesWritten;
-//             }
-//             entry->fileStart = newBlock;
-//             fileStart = newBlock;
-//             block = newBlock;
-//         }
-
-//          printf("block %d\n", block);   
-
-        
-
-//         // get current block data to write to end of existing data
-//         char blockBuf[BLOCK_SIZE];
-//         if (block_read(superblock->dataStart + block, blockBuf) == -1) {
-//             return -1;
-//         }
-
-//         // get bytes left to write 
-//         unsigned int bytesLeft = BLOCK_SIZE - blockPosition;
-//         // update bytes left to be only up to data wanted
-//         if (bytesLeft > nbyte - bytesWritten) {
-//             bytesLeft = nbyte - bytesWritten;
-//         }
-        
-//         memcpy(blockBuf + blockPosition, buf + bytesWritten, bytesLeft);
-//         if (block_write(superblock->dataStart + block, blockBuf) == -1) {
-//             return -1;
-//         }
-//         bytesWritten += bytesLeft;
-//         offset += bytesLeft;
-
-//         printf("continue %d\n", bytesWritten < nbyte);
-
-
-//     }
-
-
-//     // set file offset and file size
-//     fd->fileOffset += bytesWritten;
-//     if (fd->fileOffset > entry->fileSize) {
-//         entry->fileSize = fd->fileOffset;
-//     }
-
-//     // printf("bytes written: %d\n", bytesWritten);
-//     return bytesWritten;
-// }
 
 int fs_write(int fildes, void *buf, size_t nbyte) {
     // error check
@@ -499,7 +383,8 @@ int fs_write(int fildes, void *buf, size_t nbyte) {
     unsigned int prevBlock = BLOCK_FILE_END;
 
     // allocate first block if file is empty
-    if (currentBlock == BLOCK_FILE_END) {
+    if (currentBlock == BLOCK_INVALID) {
+        // printf("ONLY ONCE\n");
         currentBlock = allocateBlock();
         if (currentBlock == -1) {
             return bytesWritten;
@@ -524,24 +409,40 @@ int fs_write(int fildes, void *buf, size_t nbyte) {
 
             // link previous block to new block
             if (prevBlock != BLOCK_FILE_END) {
+                // printf("prevBlock: %d\n", prevBlock);
                 fat->table[prevBlock] = newBlock;
             }
             
             currentBlock = newBlock;
             fat->table[currentBlock] = BLOCK_FILE_END;
+            i--;
         } else {
+            // traverse forward
             prevBlock = currentBlock;
             currentBlock = fat->table[currentBlock];
         }
         
 
     }
+    if (currentBlock == BLOCK_FILE_END) {
+        currentBlock = allocateBlock();
+        if (currentBlock == -1) {
+            return bytesWritten;
+        }
+        if (prevBlock != BLOCK_FILE_END) {
+            fat->table[prevBlock] = currentBlock;
+        }
+        fat->table[currentBlock] = BLOCK_FILE_END;
+    }
+
+    // printf("currentBlock: %d\n", currentBlock);
 
     //  write data
     while (bytesWritten < nbyte) {
+        // printf("bytesWritten: %d\n", bytesWritten);
         // read current block to get existing data
         char blockBuffer[BLOCK_SIZE];
-        if (block_read(superblock->dataStart + currentBlock, blockBuffer) == -1) {
+        if ((currentBlock != BLOCK_FILE_END) && block_read(superblock->dataStart + currentBlock, blockBuffer) == -1) {
             return -1;
         }
 
@@ -566,8 +467,10 @@ int fs_write(int fildes, void *buf, size_t nbyte) {
         if (bytesWritten < nbyte) {
             // check if we need to allocate a new block
             unsigned int nextBlock = fat->table[currentBlock];
+            // printf("nextBlock: %d\n", nextBlock);
             if (nextBlock == BLOCK_FILE_END) {
                 nextBlock = allocateBlock();
+                // printf("writing nextBlock: %d\n", nextBlock);
                 if (nextBlock == -1) {
                     break;
                 }
@@ -692,10 +595,12 @@ int fs_truncate(int fildes, off_t length) {
     }
 
     // free blocks after length
-    while (block != BLOCK_FILE_END) {
+    int count = 0;
+    while (block != BLOCK_FILE_END && count != DISK_BLOCKS) {
         unsigned int nextBlock = fat->table[block];
-        fat->table[block] = BLOCK_FILE_END;
+        fat->table[block] = BLOCK_INVALID;
         block = nextBlock;
+        count++;
     }
 
     // update file size and set fd if needed

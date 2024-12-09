@@ -1,14 +1,14 @@
 CC=gcc -Werror -Wall -g 
-default: tlslib
+default: tls
 
-threadlib: tls.c
-	$(CC) -c -o tls.o tls.c
+tls: tls.c tls.h
+	$(CC) -c -lpthread -o tls.o tls.c
 
-push: threadlib tlslib.c README
-	scp -P 10001  ./testSemaphore.c ./test-threads.c ./ec440threads.h ./threads.c ./test-threadlib.c ./makefile ./README terrier009@ec440.bu.edu:/home/uebungen/terrier/terrier009/project3-testing
+push:
+	scp -P 10001 ./TIME ./tls.h ./tls.c ./makefile ./README terrier009@ec440.bu.edu:/home/uebungen/terrier/terrier009/project4-testing
 	
 submit:
-	scp -P 10001 ./tls.h ./tls.c ./makefile ./README terrier009@ec440.bu.edu:/home/uebungen/terrier/terrier009/project3
+	scp -P 10001 ./TIME ./tls.h ./tls.c ./makefile ./README terrier009@ec440.bu.edu:/home/uebungen/terrier/terrier009/project4
 
 
 clean:

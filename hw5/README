@@ -1,3 +1,55 @@
+# Author
+Derek Xu
+U18821640
+
+# Explanation
+This file system is attempting to replicate a FAT file system. To start there is a SuperBlock that holds all the absolute locations of the start of the FAT, root directory, and the data. The FAT data structure holds a table that serves to link the data blocks together. The Directory structure holds all the directory entries which each hold a filename, the file start location, and the file size. Finally, the FileDescriptor struct serves to give the user file descriptors thus connects to the directory entry and holds info about the file being open and its current offset to the start of the file.
+
+allocateBlock
+Allocates a block of the data blocks and returns the index of that block.
+
+make_fs
+First it calls the make_disk command and open_disk to initialize the FAT system. The superblock is initialized and defines the absolute blocks where the file system components are stored. The FAT is initialized with BLOCK_INVALID and the root directory is initialized to 0. Then, using block_write, we write all the metadata to the necessary blocks at their locations defined by the superblock, making sure to write to a different block for evey block size number of bytes. The disk is closed and is ready to mount.
+
+mount_fs
+The function opens the disk and reads the superblock. Then using the superblock data, it reads the root directory and FAT into the global variables defining the FAT and root directory. Then the file descriptors are initialized and essentially reset.
+
+umount_fs
+This checks if a drive is mounted and saves the superblock, root directory blocks, and the FAT blocks to the disk. Then the file descriptors are cleared and the disk is closed.
+
+fs_open
+This looks through the root directory data structure and compares the filename in the root directory with the name given. If a match is found, an open file descriptor spot is searched for and then sets open to 1 and directory entry to the entry found in the root directory. The index of the file descriptor is returned.
+
+fs_close
+This will look for the file descriptor in the fd array and check if it is open. If it is, return an error and otherwise reset the data at that index to point to NULL.
+
+fs_create
+This checks if the file name exists first by looking through the root. Then, the root directory is searched to find an empty slot and then initialized with the new file's name and initially set to invalid with a file size of 0.
+
+fs_delete
+This will search the root directory to find the starting block for the file. Then the FAT is traversed using the block and for each table entry traversed, the value is set to BLOCK_INVALID so it can be allocated to another file if needed. The Directory entry is then cleared and the file is essentially deleted.
+
+fs_read
+To read, the file descriptor and the associated directory entry and the starting block are found. Additionally, the offset is found based on the file descriptor's current offset. After error checking for size and if the file exists and is open, a loop is entered to read all the data. While the # of bytes read is < num bytes to read, we use the file start as the starting block and calculate the offset in blocks from the start. Then the index into the block is also found. Then we traverse the FAT table using the blockoffset as the count to get to the block to read. Then we read from superblock->dataStart + block since that is the data block's absolute block. The number of bytes left to read in the block is found to determine if we only need to read up to within a block or just keep on reading the entire block and more. Then the data is copied into buf + bytesRead to get the offset in the buffer to write to. This data is copied from the block read from disk + blockPosition to get the offset into the block. Then bytesRead and offset are incremented by the number of bytes read to continue iteration. At the end, the fileOffset of the file descriptor is added by bytesRead to move the file descriptor implicitly and the number of bytes read is returned.
+
+fs_write
+After error checking, the code finds the directory entry and gets the associated data block from the directory entry and offset from the file descriptor. Then the first block of the file is allocated if it is empty by checking the current first block is invalid, then allocating a block by setting the value to 0, then sets the file start to the newly allocated block. This then sets the FAT table entry to BLOCK_FILE_END which denotes the end of a file. Then the block offset from the start and the index into the block are found. Then it traverses the FAT table by blockIndex number of times to get to the correct block. This also allocates blocks along the way. Then once we get to the block to start writing, it first reads the block data into a buffer. Then the number of bytes left in the block is found along with the bytes to write. The data is copied into the buffer using offsets defined by blockPosition and bytesWritten. This block buffer is then written into the disk at the data start + current block. The cursors are moved to prepare for the next iteration. Then if there is more data to be written, we get the next block by accessing the FAT table. If the next entry is the file end, then allocate a block and set the file end block to point to the newly allocated block. Repeat this process until the the bytes written matches the nbyte parameter. At the end, update the file descriptors offset to add the bytes written and then adjust the file size if the file offset surpases the previous file size. Then the number of bytes is returned.
+
+fs_get_filesize
+This function accesses the file descriptor array, gets the directory entry associated, and then returns the fileSize field.
+
+fs_listFiles
+This will traverse the root directory's entries and print out all filenames which are found to not be empty. This function mallocs an array of strings and sets the last entry to NULL.
+
+fs_lseek
+This will get the file descriptor, check if the offset given is valid using the fileSize of the directoryEntry, then sets the fileOffset to the offset provided.
+
+fs_truncate
+This will get the file descriptor and its associated directory entry, check that the length is valid, then traverses the FAT table to the length / BLOCK_SIZE blocks after. Then any blocks after until the block that holds end of file, those are set to invalid by traversing the FAT table until the end of file is reached. Then the file size of the diretory entry is updated to the new length and the file offset set if needed.
+
+## Problems
+The main problems involved dealing with block boundaries and setting the proper values for when data blocks were invalid or the end of the file. These problems kept the program from reading more than 1 block worth of data at a time and made traversing the FAT table complicated. These were mostly solved with many hours of debugging and printing the allocated blocks for the FAT table.
+
 # Specifications
 
 No more than 64 files

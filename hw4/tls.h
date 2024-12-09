@@ -3,13 +3,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <unistd.h>
 #include <sys/mman.h>
+#include <string.h>
 
 #define HASH_SIZE 128
 // #define PAGE_SIZE 4096
 
 
-
+// local storage struct
 typedef struct thread_local_storage {
     pthread_t tid; 
     unsigned int size; // size in bytes
@@ -17,11 +19,13 @@ typedef struct thread_local_storage {
     struct page **pages; // array of pointers to pages
 } TLS;
 
+// page struct
 struct page {
-    unsigned int address; // start address of page
+    unsigned long int address; // start address of page
     int ref_count; // counter for shared pages
 };
 
+// hash element to connect tid to TLS
 struct hash_element
 {
     pthread_t tid;
@@ -29,60 +33,68 @@ struct hash_element
     struct hash_element *next;
 };
 
-// initializes tls system
+/**
+ * Initializes TLS system
+ */
 void tls_init();
 
-/*
-This function reads length bytes from the local storage area of the currently executing thread,
-starting at position offset, and writes them into the memory location pointed to by buffer. The
-function returns 0 on success or -1 (error) if it is asked to read past the end of the LSA (i.e.,
-offset + length > size of LSA) or if the current thread has no LSA. Finally, the function trusts
-that the buffer into which data is written is large enough to hold at least length bytes. If not, the
-result of the call is undefined.
-*/
+/**
+ * Creates new LSA for thread
+ * @param size size of LSA in bytes
+ * @return 0 on success, -1 on failure
+ */
 int tls_create(unsigned int size);
 
-/*
-This function reads length bytes, starting from the memory location pointed to by buffer, and
-writes them into the local storage area of the currently executing thread, starting at position
-offset. It returns 0 on success and -1 (error) if the function is asked to write more data than the
-LSA can hold (i.e., offset + length > size of LSA) or if the current thread has no LSA. Finally,
-the function trusts that the buffer from which data is read holds at least length bytes. If not, the
-result of the call is undefined
-*/
+/**
+ * Writes to LSA
+ * @param offset offset to start writing to
+ * @param length number of bytes to write
+ * @param buffer buffer to write from
+ * @return 0 on success, -1 on failure
+ */
 int tls_write(unsigned int offset, unsigned int length, char *buffer);
 
-/*
-This function reads length bytes from the local storage area of the currently executing thread,
-starting at position offset, and writes them into the memory location pointed to by buffer. The
-function returns 0 on success or -1 (error) if it is asked to read past the end of the LSA (i.e.,
-offset + length > size of LSA) or if the current thread has no LSA. Finally, the function trusts
-that the buffer into which data is written is large enough to hold at least length bytes. If not, the
-result of the call is undefined.
-*/
+/**
+ * Reads bytes into target buffer
+ * @param offset offset to start reading from
+ * @param length number of bytes to read
+ * @param buffer buffer to read into
+ * @return 0 on success, -1 on failure
+ */
 int tls_read(unsigned int offset, unsigned int length, char *buffer);
 
-/*
-This function frees a previously allocated local storage area of the currently executing thread. It
-returns 0 on success and -1(error) when the thread does not have a local storage area.
-*/
+/**
+ * Destorys LSA
+ * @return 0 on success, -1 on failure
+ */
 int tls_destroy();
 
-/*
-This function clones the local storage area of a target thread identified by tid. When a thread
-local storage is cloned, the content is not simply copied. Instead, the storage areas of both
-threads initially refer to the same memory location. Only when one thread writes to its own LSA
-(using the tls_write function), then the TLS library creates a private copy of the region that
-is written. Note, though, that the remaining, untouched areas still remain shared. This approach
-is called CoW (copy-on-write), and it is done to save memory space and to avoid unnecessary
-copy operations. The function returns 0 on success. It is an error when the target thread has no
-LSA, or when the currently executing thread already has a LSA. In both cases, the function
-returns -1.
-*/
+/**
+ * Clones local storage using copy on write
+ * @param tid thread id of the thread to clone
+ * @return 0 on success, -1 on failure
+ */
 int tls_clone(pthread_t tid);
 
+/**
+ * Handles page faults
+ * @param sig signal number
+ * @param si signal info
+ * @param context context
+ * @return void
+ */
 void tlsPageFaultHandler(int sig, siginfo_t *si, void *context);
 
+/**
+ * Protects page
+ * @param p page to protect
+ * @return void
+ */
 void tls_protect(struct page *p);
 
+/**
+ * Unprotects page
+ * @param p page to unprotect
+ * @return void
+ */
 void tls_unprotect(struct page *p);
